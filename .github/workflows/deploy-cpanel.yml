@@ -1,0 +1,98 @@
+name: Deploy to cPanel
+
+# On every push to main:
+#   1. Build the frontend here on GitHub (shared hosting kills `npm run build`
+#      for exceeding its memory limit).
+#   2. Commit the build output plus backend/ and .cpanel.yml to the `deploy`
+#      branch — the branch cPanel's repository checks out.
+#   3. Tell cPanel to pull `deploy` and run .cpanel.yml, which only copies
+#      files, installs Python packages, and restarts the backend.
+# Manual only for now: this workflow came from the school product and still points at the
+# school's live API. Set VITE_API_URL and the CPANEL_* secrets for the college hosting,
+# then add `push: branches: [main]` back to deploy on every push.
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-cpanel
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+env:
+  # Baked into the frontend bundle at build time — must be the live API URL.
+  VITE_API_URL: https://collegeapi.example.com/api/v1  # TODO: the college live API URL
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm ci && npm run build
+
+      - name: Update deploy branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Keep deploy's history linear so cPanel's `git pull` always fast-forwards.
+          if git ls-remote --exit-code --heads origin deploy >/dev/null; then
+            git worktree add -B deploy out origin/deploy
+          else
+            git worktree add --orphan -b deploy out
+          fi
+
+          find out -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+          git archive HEAD .cpanel.yml backend database | tar -x -C out
+          mkdir -p out/frontend
+          cp -r frontend/dist out/frontend/dist
+
+          cd out
+          git add -A -f
+          if git diff --cached --quiet; then
+            echo "deploy branch already up to date"
+          else
+            git commit -q -m "deploy: ${GITHUB_SHA::7}"
+            git push origin deploy
+          fi
+
+      - name: Pull deploy branch on cPanel
+        env:
+          CPANEL_HOST: ${{ secrets.CPANEL_HOST }}
+          CPANEL_USER: ${{ secrets.CPANEL_USER }}
+          CPANEL_API_TOKEN: ${{ secrets.CPANEL_API_TOKEN }}
+          CPANEL_REPO_ROOT: ${{ secrets.CPANEL_REPO_ROOT }}
+        run: |
+          response=$(curl -sS --fail -G \
+            -H "Authorization: cpanel ${CPANEL_USER}:${CPANEL_API_TOKEN}" \
+            --data-urlencode "repository_root=${CPANEL_REPO_ROOT}" \
+            --data-urlencode "branch=deploy" \
+            "https://${CPANEL_HOST}:2083/execute/VersionControl/update")
+          echo "$response" | jq '{status, errors, messages, branch: .data.branch, last_update: .data.last_update}'
+          test "$(echo "$response" | jq -r '.status')" = "1"
+
+      - name: Deploy HEAD commit (runs .cpanel.yml)
+        env:
+          CPANEL_HOST: ${{ secrets.CPANEL_HOST }}
+          CPANEL_USER: ${{ secrets.CPANEL_USER }}
+          CPANEL_API_TOKEN: ${{ secrets.CPANEL_API_TOKEN }}
+          CPANEL_REPO_ROOT: ${{ secrets.CPANEL_REPO_ROOT }}
+        run: |
+          response=$(curl -sS --fail -G \
+            -H "Authorization: cpanel ${CPANEL_USER}:${CPANEL_API_TOKEN}" \
+            --data-urlencode "repository_root=${CPANEL_REPO_ROOT}" \
+            "https://${CPANEL_HOST}:2083/execute/VersionControlDeployment/create")
+          echo "$response" | jq '{status, errors, messages, data: {task_id: .data.task_id, log_path: .data.log_path}}'
+          test "$(echo "$response" | jq -r '.status')" = "1"

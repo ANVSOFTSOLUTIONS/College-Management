@@ -7,9 +7,8 @@ name: Deploy to cPanel
 #      branch — the branch cPanel's repository checks out.
 #   3. Tell cPanel to pull `deploy` and run .cpanel.yml, which only copies
 #      files, installs Python packages, and restarts the backend.
-# Manual only for now: this workflow came from the school product and still points at the
-# school's live API. Set VITE_API_URL and the CPANEL_* secrets for the college hosting,
-# then add `push: branches: [main]` back to deploy on every push.
+# Manual until the CPANEL_* secrets for the college hosting are set in this repo; then add
+# `push: branches: [main]` back to deploy on every push.
 on:
   workflow_dispatch:
 
@@ -22,7 +21,7 @@ permissions:
 
 env:
   # Baked into the frontend bundle at build time — must be the live API URL.
-  VITE_API_URL: https://collegeapi.example.com/api/v1  # TODO: the college live API URL
+  VITE_API_URL: https://collegeapi.anvsoftsolutions.com/api/v1
 
 jobs:
   deploy:

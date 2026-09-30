@@ -370,7 +370,7 @@ def secret_of(settings: dict) -> str:
 def return_url() -> str:
     """Where PhonePe sends the payer back to (the app; the page itself checks the payment)."""
     origins = get_settings().cors_origin_list
-    return (origins[0] if origins else "https://school.anvsoftsolutions.com").rstrip("/") + "/"
+    return (origins[0] if origins else "https://college.anvsoftsolutions.com").rstrip("/") + "/"
 
 
 def gateway_failed(exc: gateways.GatewayError) -> AppError:

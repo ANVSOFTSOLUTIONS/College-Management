@@ -18,7 +18,7 @@ one codebase; the app shows college terms.
 |---|---|---|
 | **Super admin** (ANV Soft Solutions) | Email, on `/superadmin` only | Creates colleges, switches modules on/off, sets billing, Pro website templates and which payment gateways a college may use, backups, platform earnings |
 | **College admin** | Email ("Faculty / Admin" tab) | Everything for their college: departments, faculty, batches, subjects, students, attendance, fees, exams, admissions, payroll, website, payment integration |
-| **Faculty / staff** | Email ("Faculty / Admin" tab) | Punch in/out, attendance, marks, assignments, remarks, leave, payslips |
+| **Faculty / HOD** | Email (mobile app) | Punch in/out, attendance, marks, assignments, remarks, leave, payslips; a HOD also sees their department's day and approves its faculty's leave |
 | **Student** | College code + roll number ("Student" tab) | Their own attendance, results with SGPA / CGPA, fees (pay online), assignments, timetable, notices, documents, leave |
 | **Parent** | Mobile number ("Parent" tab) | One login for all their children: attendance, results, assignments, notices, fees (pay online or report an offline payment), documents, leave |
 
@@ -204,10 +204,10 @@ The older `python -m scripts.dev_seed` (a super admin and two sample schools) st
 
 Demo accounts on the live site are listed in [docs/DEMO_LOGINS.md](docs/DEMO_LOGINS.md).
 
-## Mobile app (students, parents, faculty)
+## Mobile app (students, parents, faculty, HODs)
 
-One React Native (Expo) app in [`mobile/`](mobile/) for students, parents and
-faculty, using the same API. The sign-in screen has **Student**, **Parent** and
+Students, parents, faculty and HODs use one React Native (Expo) app in
+[`mobile/`](mobile/), on the same API. The sign-in screen has **Student**, **Parent** and
 **Faculty** tabs; the app then shows that role's screens. Admins and office staff
 use the website.
 
@@ -215,7 +215,8 @@ use the website.
 |---|---|---|
 | Student | College code + roll number | Attendance %, fees due, results with SGPA / CGPA, assignments, notices, timetable, leave, hostel room, bus route, library books, placement drives (apply / withdraw) |
 | Parent | Mobile number | The same for each child (switch between children), without placements |
-| Faculty | College email | Punch in / out, mark attendance, enter marks, post assignments, timetable, notices, leave |
+| Faculty | College email | Punch in / out, mark attendance, enter marks, post assignments, approve students' leave, remarks, payslips, timetable, notices, leave |
+| HOD | College email | Faculty features plus the department view: faculty present today, batch attendance, students below 75%, approving department faculty's leave |
 
 Run it on a phone (same Wi-Fi as your PC):
 

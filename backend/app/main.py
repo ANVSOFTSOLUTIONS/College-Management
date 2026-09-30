@@ -21,6 +21,7 @@ from app.modules.certificates.router import router as certificates_router
 from app.modules.dashboard.router import router as dashboard_router
 from app.modules.exams.router import papers_router as exam_papers_router, parent_results_router, router as exams_router
 from app.modules.fees.router import router as fees_router
+from app.modules.hod.router import router as hod_router
 from app.modules.hostel.router import portal_router as hostel_portal_router, router as hostel_router
 from app.modules.leave.router import router as leave_router
 from app.modules.library.router import portal_router as library_portal_router, router as library_router
@@ -77,6 +78,7 @@ app.include_router(classes_admin_router, prefix=settings.api_prefix)
 app.include_router(teachers_router, prefix=settings.api_prefix)
 app.include_router(subjects_router, prefix=settings.api_prefix)
 app.include_router(departments_router, prefix=settings.api_prefix)
+app.include_router(hod_router, prefix=settings.api_prefix)
 app.include_router(parent_logins_router, prefix=settings.api_prefix)
 app.include_router(students_router, prefix=settings.api_prefix)
 app.include_router(teaching_router, prefix=settings.api_prefix)

@@ -1,5 +1,6 @@
 """College structure: departments, batches with semesters, credits, SGPA / CGPA, and student logins."""
 
+from app.modules.alerts.service import today_ist
 from tests.factories import auth_headers, create_school, create_user, login
 
 PASSWORD = "Secret123!"
@@ -173,3 +174,48 @@ async def test_student_app_calls(db, client):
     assert applied.status_code == 201, applied.text
     mine = (await client.get(f"{API}/leave/mine", headers=headers)).json()
     assert [(l["applicant_name"], l["days"]) for l in mine] == [("Sita", 2)]
+
+
+async def test_hod_dashboard_and_faculty_leave(db, client):
+    admin, hod = await _college(client, "COL6")
+    cse = (await client.post(f"{API}/departments", json={"name": "Computer Science", "code": "CSE", "hod_teacher_id": hod["id"]}, headers=admin)).json()
+    ece = (await client.post(f"{API}/departments", json={"name": "Electronics", "code": "ECE"}, headers=admin)).json()
+    await client.patch(f"{API}/teachers/{hod['id']}", json={"department_id": cse["id"]}, headers=admin)
+    body = {"email": "col6-f@example.com", "full_name": "Anil", "password": PASSWORD, "department_id": cse["id"]}
+    anil = (await client.post(f"{API}/teachers", json=body, headers=admin)).json()
+    body = {"email": "col6-e@example.com", "full_name": "Ravi", "password": PASSWORD, "department_id": ece["id"]}
+    await client.post(f"{API}/teachers", json=body, headers=admin)
+    batch = (await client.post(f"{API}/classes", json={"name": "B.Tech CSE", "section": "A", "academic_year": "2026", "class_teacher_id": anil["id"],
+                                                        "department_id": cse["id"], "semester": 3}, headers=admin)).json()
+    student = (await client.post(f"{API}/students", json={"admission_number": "C1", "full_name": "Asha", "class_id": batch["id"]}, headers=admin)).json()
+
+    hod_login = (await login(client, "col6-hod@example.com", PASSWORD)).json()
+    assert hod_login["user"]["is_hod"] is True
+    assert (await login(client, "col6-f@example.com", PASSWORD)).json()["user"]["is_hod"] is False
+    hod_headers = auth_headers(hod_login["access_token"])
+    anil_headers = auth_headers((await login(client, "col6-f@example.com", PASSWORD)).json()["access_token"])
+    ravi_headers = auth_headers((await login(client, "col6-e@example.com", PASSWORD)).json()["access_token"])
+
+    # Anil marks Asha absent; she shows up as low attendance.
+    await client.post(f"{API}/classes/{batch['id']}/attendance", json={"date": today_ist().isoformat(), "records": [{"student_id": student["id"], "status": "absent"}]},
+                      headers=anil_headers)
+    await client.post(f"{API}/staff-punch/in", headers=anil_headers)
+    overview = (await client.get(f"{API}/hod/overview", headers=hod_headers)).json()
+    dept = overview["departments"][0]
+    assert dept["code"] == "CSE"
+    assert {f["full_name"]: f["status"] for f in dept["faculty"]}.keys() == {"Dr. Rao", "Anil"}
+    assert {f["full_name"]: f["status"] for f in dept["faculty"]}["Dr. Rao"] == "not_in"
+    assert [(b["name"], b["marked"], b["absent"]) for b in dept["batches"]] == [("B.Tech CSE", True, 1)]
+    assert [(s["full_name"], s["percent"]) for s in dept["low_attendance"]] == [("Asha", 0.0)]
+    assert (await client.get(f"{API}/hod/overview", headers=anil_headers)).status_code == 403
+
+    # The HOD reviews CSE faculty leave, not ECE's.
+    leave = {"leave_type": "casual", "from_date": "2026-10-05", "to_date": "2026-10-05", "reason": "Family function"}
+    anil_leave = (await client.post(f"{API}/leave", json=leave, headers=anil_headers)).json()
+    ravi_leave = (await client.post(f"{API}/leave", json=leave, headers=ravi_headers)).json()
+    inbox = (await client.get(f"{API}/leave/inbox", headers=hod_headers)).json()
+    assert [(l["applicant_name"], l["can_review"]) for l in inbox] == [("Anil", True)]
+    assert (await client.get(f"{API}/hod/overview", headers=hod_headers)).json()["pending_leaves"] == 1
+    assert (await client.post(f"{API}/leave/{ravi_leave['id']}/review", json={"status": "approved", "note": ""}, headers=hod_headers)).status_code == 403
+    approved = await client.post(f"{API}/leave/{anil_leave['id']}/review", json={"status": "approved", "note": ""}, headers=hod_headers)
+    assert approved.json()["status"] == "approved"

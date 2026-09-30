@@ -78,9 +78,11 @@ class LeaveOut(BaseModel):
 
 _SELECT = """
     SELECT l.*, COALESCE(s.full_name, u.full_name) AS applicant_name, u.role AS applicant_role, r.full_name AS reviewer_name,
-           c.name AS class_name, c.section, c.teacher_id AS class_teacher_id, s.admission_number
+           c.name AS class_name, c.section, c.teacher_id AS class_teacher_id, s.admission_number,
+           apt.department_id AS applicant_department_id
     FROM leave_requests l
     JOIN users u ON u.id = l.applicant_user_id
+    LEFT JOIN teachers apt ON apt.id = l.teacher_id
     LEFT JOIN users r ON r.id = l.reviewer_id
     LEFT JOIN classes c ON c.id = l.class_id
     LEFT JOIN students s ON s.id = l.student_id
@@ -92,16 +94,26 @@ async def _teacher_id(user: CurrentUser) -> str | None:
     return row["id"] if row else None
 
 
-def _can_review(user: CurrentUser, teacher_id: str | None, row: dict) -> bool:
+async def _hod_departments(teacher_id: str | None) -> frozenset[str]:
+    """Departments the faculty member heads."""
+    if teacher_id is None:
+        return frozenset()
+    rows = await fetch_all("SELECT id FROM departments WHERE hod_teacher_id = %s", (teacher_id,))
+    return frozenset(r["id"] for r in rows)
+
+
+def _can_review(user: CurrentUser, teacher_id: str | None, row: dict, hod_of: frozenset[str] = frozenset()) -> bool:
     if row["status"] != "pending" or row["applicant_user_id"] == user.id:
         return False
     if user.role == "admin":
         return True
-    # Class teachers review their own students' leave; teacher leave is for admins.
-    return row["student_id"] is not None and teacher_id is not None and row["class_teacher_id"] == teacher_id
+    # Class teachers review their own students' leave; a HOD reviews their department's faculty; other staff leave is for admins.
+    if row["student_id"] is not None:
+        return teacher_id is not None and row["class_teacher_id"] == teacher_id
+    return row["applicant_department_id"] in hod_of
 
 
-def _out(row: dict, user: CurrentUser, teacher_id: str | None) -> LeaveOut:
+def _out(row: dict, user: CurrentUser, teacher_id: str | None, hod_of: frozenset[str] = frozenset()) -> LeaveOut:
     return LeaveOut(
         id=row["id"],
         applicant_name=row["applicant_name"],
@@ -120,7 +132,7 @@ def _out(row: dict, user: CurrentUser, teacher_id: str | None) -> LeaveOut:
         review_note=row["review_note"],
         reviewer_name=row["reviewer_name"],
         created_at=row["created_at"].isoformat(),
-        can_review=_can_review(user, teacher_id, row),
+        can_review=_can_review(user, teacher_id, row, hod_of),
         can_cancel=row["applicant_user_id"] == user.id and row["status"] == "pending",
     )
 
@@ -188,8 +200,15 @@ async def apply(user: CurrentUser, payload: ApplyLeaveRequest) -> LeaveOut:
             link="leave",
         )
     else:
+        hod = await fetch_one(
+            """
+            SELECT h.user_id FROM teachers t JOIN departments d ON d.id = t.department_id JOIN teachers h ON h.id = d.hod_teacher_id
+            WHERE t.id = %s AND h.user_id <> %s
+            """,
+            (teacher_id, user.id),
+        )
         await notifications.notify(
-            await notifications.admin_user_ids(user.school_id),
+            await notifications.admin_user_ids(user.school_id) + ([hod["user_id"]] if hod else []),
             school_id=user.school_id,
             title=f"Staff leave request: {user.full_name}",
             body=f"{LEAVE_LABELS[payload.leave_type]}, {when}. {payload.reason}",
@@ -205,7 +224,8 @@ async def _get(user: CurrentUser, leave_id: str) -> LeaveOut:
     )
     if row is None:
         raise AppError(status.HTTP_404_NOT_FOUND, "leave_not_found", "Leave request not found.")
-    return _out(row, user, await _teacher_id(user) if user.role == "teacher" else None)
+    teacher_id = await _teacher_id(user) if user.role == "teacher" else None
+    return _out(row, user, teacher_id, await _hod_departments(teacher_id))
 
 
 async def my_leaves(user: CurrentUser) -> list[LeaveOut]:
@@ -215,19 +235,24 @@ async def my_leaves(user: CurrentUser) -> list[LeaveOut]:
 
 
 async def inbox(user: CurrentUser, *, only_pending: bool) -> list[LeaveOut]:
-    """Requests the user reviews: admins see all; a class teacher sees their students'."""
+    """Requests the user reviews: admins see all; a class teacher their students'; a HOD also their department's faculty."""
     where, params = ["l.school_id = %s", "l.applicant_user_id <> %s"], [user.school_id, user.id]
-    teacher_id = None
+    teacher_id, hod_of = None, frozenset()
     if user.role == "teacher":
         teacher_id = await _teacher_id(user)
-        where.append("l.student_id IS NOT NULL AND c.teacher_id = %s")
+        hod_of = await _hod_departments(teacher_id)
+        mine = "(l.student_id IS NOT NULL AND c.teacher_id = %s)"
         params.append(teacher_id)
+        if hod_of:
+            mine = f"({mine} OR (l.teacher_id IS NOT NULL AND apt.department_id IN ({', '.join(['%s'] * len(hod_of))})))"
+            params.extend(sorted(hod_of))
+        where.append(mine)
     if only_pending:
         where.append("l.status = 'pending'")
     rows = await fetch_all(
         f"{_SELECT} WHERE {' AND '.join(where)} ORDER BY l.status = 'pending' DESC, l.from_date DESC LIMIT 300", tuple(params)
     )
-    return [_out(r, user, teacher_id) for r in rows]
+    return [_out(r, user, teacher_id, hod_of) for r in rows]
 
 
 async def cancel(user: CurrentUser, leave_id: str) -> LeaveOut:
@@ -243,7 +268,7 @@ async def review(user: CurrentUser, leave_id: str, payload: ReviewLeaveRequest) 
     if row is None:
         raise AppError(status.HTTP_404_NOT_FOUND, "leave_not_found", "Leave request not found.")
     teacher_id = await _teacher_id(user) if user.role == "teacher" else None
-    if not _can_review(user, teacher_id, row):
+    if not _can_review(user, teacher_id, row, await _hod_departments(teacher_id)):
         if row["status"] != "pending":
             raise AppError(status.HTTP_409_CONFLICT, "already_reviewed", "This request was already handled.")
         raise AppError(status.HTTP_403_FORBIDDEN, "forbidden", "You can't review this request.")

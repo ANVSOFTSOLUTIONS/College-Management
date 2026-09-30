@@ -1,15 +1,16 @@
 # ANV College — mobile app
 
-One React Native (Expo) app for **students, parents and faculty**. The sign-in
+One React Native (Expo) app for **students, parents, faculty and HODs** — these users work only in the app. The sign-in
 screen has three tabs; after sign-in the app shows the screens for that role.
-It uses the same backend API as the website. College admins and staff use the
-website.
+It uses the same backend API as the website. College admins and office staff use
+the website.
 
 | Role | Signs in with | Screens |
 |---|---|---|
 | Student | College code + roll number | Home (attendance %, fees due, hostel, bus, library books, remarks), Results (grades, SGPA, CGPA), Assignments, Notices, Timetable, Leave, Placements (apply to drives) |
 | Parent | Mobile number | Same as a student, for each child (switch at the top), without Placements |
-| Faculty | College email | Punch in / out, Attendance (tap to mark present / absent / late), Marks entry, Assignments (post / delete), Timetable, Notices, Leave |
+| Faculty | College email | Punch in / out, Attendance (tap to mark present / absent / late), Marks entry, Assignments (post / delete), approve / reject their students' leave, student remarks, Payslips, Timetable, Notices, own Leave |
+| HOD | College email (a faculty member set as head of department) | Everything faculty have, plus a **Dept** tab: faculty punch status today, each batch's attendance today, students below 75% attendance, and approving department faculty's leave |
 
 First sign-in asks for a new password. Tabs for modules the college has
 switched off (exams, assignments, notices, timetable, placements) are hidden.

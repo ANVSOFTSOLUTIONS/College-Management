@@ -51,12 +51,21 @@ class UserSummary(BaseModel):
     school_id: str | None
     must_change_password: bool = False
     enabled_modules: list[str] | None = None  # the school's optional modules; None for parents and the super admin
+    is_hod: bool = False  # faculty who head a department (the app shows them the department view)
 
 
 class LoginResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserSummary
+
+
+async def _is_hod(user_id: str, role: str) -> bool:
+    if role != "teacher":
+        return False
+    return await fetch_one(
+        "SELECT d.id FROM departments d JOIN teachers t ON t.id = d.hod_teacher_id WHERE t.user_id = %s LIMIT 1", (user_id,)
+    ) is not None
 
 
 def _invalid_credentials() -> AppError:
@@ -118,6 +127,7 @@ async def login(payload: LoginRequest, request: Request) -> LoginResponse:
             school_id=school_id,
             must_change_password=bool(user["must_change_password"]),
             enabled_modules=sorted(await school_modules(school_id)) if school_id else None,
+            is_hod=await _is_hod(user["id"], user["role"]),
         ),
     )
 
@@ -168,6 +178,7 @@ async def me(current_user: CurrentUser = Depends(get_current_user)) -> MeRespons
             school_id=current_user.school_id,
             must_change_password=bool(user["must_change_password"]),
             enabled_modules=sorted(await school_modules(current_user.school_id)) if current_user.school_id else None,
+            is_hod=await _is_hod(current_user.id, current_user.role),
         ),
         school=school,
     )

@@ -6,6 +6,7 @@ import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { AuthProvider, useApi, useAuth } from "./src/auth";
 import { AttendanceScreen, FacultyAssignmentsScreen, MarksScreen, PunchScreen } from "./src/screens/FacultyScreens";
 import { ChangePasswordScreen, LoginScreen } from "./src/screens/LoginScreen";
+import { DepartmentScreen, LeaveInboxScreen, PayslipsScreen, RemarksScreen } from "./src/screens/StaffExtraScreens";
 import {
   AssignmentsScreen,
   ChildPicker,
@@ -20,6 +21,7 @@ import { Card, colors, H, Muted, Screen } from "./src/ui";
 
 // Tabs per role; `module` hides a tab when the college has that module switched off.
 const FACULTY_TABS = [
+  { id: "department", label: "Dept", icon: "🏛", hodOnly: true },
   { id: "punch", label: "Punch", icon: "⏱" },
   { id: "attendance", label: "Attendance", icon: "✓" },
   { id: "marks", label: "Marks", icon: "✎", module: "exams" },
@@ -34,15 +36,19 @@ const PORTAL_TABS = [
   { id: "more", label: "More", icon: "☰" },
 ];
 const MORE_ITEMS = [
+  { id: "leave-inbox", label: "Leave requests to approve", roles: ["teacher"] },
+  { id: "remarks", label: "Student remarks", roles: ["teacher"] },
   { id: "timetable", label: "Timetable", module: "timetable", roles: ["student", "parent", "teacher"] },
   { id: "notices", label: "Notice board", module: "notices", roles: ["teacher"] },
   { id: "placements", label: "Placements", module: "placements", roles: ["student"] },
-  { id: "leave", label: "Leave", roles: ["student", "parent", "teacher"] },
+  { id: "payslips", label: "Payslips", module: "payroll", roles: ["teacher"] },
+  { id: "leave", label: "My leave", roles: ["student", "parent", "teacher"] },
   { id: "password", label: "Change password", roles: ["student", "parent", "teacher"] },
 ];
 
 function enabled(user, item) {
   // Parents have no college of their own (enabled_modules is null): show everything.
+  if (item.hodOnly && !user.is_hod) return false;
   return !item.module || !user.enabled_modules || user.enabled_modules.includes(item.module);
 }
 
@@ -93,6 +99,10 @@ function Shell({ tabs, render }) {
     setTab(id);
     setPage(null);
   }
+  const openMore = (id) => {
+    setTab("more");
+    setPage(id);
+  };
 
   let body;
   if (tab === "more" && page) {
@@ -101,13 +111,13 @@ function Shell({ tabs, render }) {
         <Pressable onPress={() => setPage(null)} style={{ paddingHorizontal: 16, paddingTop: 10 }}>
           <Text style={{ color: colors.brand, fontWeight: "700" }}>‹ More</Text>
         </Pressable>
-        {render(page)}
+        {render(page, openMore)}
       </View>
     );
   } else if (tab === "more") {
     body = <MoreScreen onOpen={setPage} />;
   } else {
-    body = render(tab);
+    body = render(tab, openMore);
   }
 
   return (
@@ -122,8 +132,12 @@ function FacultyApp() {
   return (
     <Shell
       tabs={FACULTY_TABS}
-      render={(id) =>
+      render={(id, openMore) =>
         ({
+          department: <DepartmentScreen onOpenLeaves={() => openMore("leave-inbox")} />,
+          "leave-inbox": <LeaveInboxScreen />,
+          remarks: <RemarksScreen />,
+          payslips: <PayslipsScreen />,
           punch: <PunchScreen />,
           attendance: <AttendanceScreen />,
           marks: <MarksScreen />,

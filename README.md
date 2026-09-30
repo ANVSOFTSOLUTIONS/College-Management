@@ -54,7 +54,7 @@ first sign-in.
 - **Online payments:** each school connects **its own** Razorpay, Cashfree or PhonePe account (money goes straight to the school). A demo gateway is available for demos only.
 - **Offline payments:** parents report cash/UPI/bank payments with a screenshot; the school confirms and a receipt is issued
 - **Homework, notice board, timetable, holiday calendar, leave, payroll, reports, performance, ID cards & certificates**
-- **School website:** 10 templates (2 free, 8 Pro), edited from the admin console
+- **College website:** 15 college templates (3 free, 12 Pro) with programs, departments, live placements, principal's message and online admissions, edited from the admin console
 - **Installable app (PWA):** staff and parents install from a QR code; push notifications
 - **Activity log, daily backups, login rate limiting, encrypted gateway secrets**
 

@@ -219,3 +219,41 @@ async def test_hod_dashboard_and_faculty_leave(db, client):
     assert (await client.post(f"{API}/leave/{ravi_leave['id']}/review", json={"status": "approved", "note": ""}, headers=hod_headers)).status_code == 403
     approved = await client.post(f"{API}/leave/{anil_leave['id']}/review", json={"status": "approved", "note": ""}, headers=hod_headers)
     assert approved.json()["status"] == "approved"
+
+
+async def test_college_website_details_and_live_placements(db, client):
+    admin, hod = await _college(client, "WEB1")
+    await client.post(f"{API}/departments", json={"name": "Computer Science", "code": "CSE"}, headers=admin)
+    info = {
+        "established": "1998",
+        "accreditation": "NAAC A+ | AICTE approved",
+        "highlights": [{"value": "25+", "label": "Years"}, {"value": "3000+", "label": "Students"}],
+        "programs": [{"name": "B.Tech CSE", "level": "UG", "duration": "4 years", "seats": "180", "description": "Core computing."}],
+        "principal_name": "Dr. K. Rao",
+        "principal_title": "Principal",
+        "principal_message": "Welcome to our campus.",
+    }
+    saved = await client.put(f"{API}/school-site/college-info", json=info, headers=admin)
+    assert saved.status_code == 200, saved.text
+    site = saved.json()
+    assert (site["established"], site["highlights"][1]["value"], site["programs"][0]["seats"]) == ("1998", "3000+", "180")
+    assert [d["code"] for d in site["departments"]] == ["CSE"]
+
+    # No one placed yet: no placements block on the public site.
+    public = (await client.get(f"{API}/public/schools/WEB1/site")).json()
+    assert public["principal_name"] == "Dr. K. Rao" and public["placements"] is None
+
+    batch = (await client.post(f"{API}/classes", json={"name": "B.Tech", "section": "A", "academic_year": "2026", "class_teacher_id": hod["id"]}, headers=admin)).json()
+    student = (await client.post(f"{API}/students", json={"admission_number": "W1", "full_name": "Asha", "class_id": batch["id"]}, headers=admin)).json()
+    await client.post(f"{API}/students/{student['id']}/login", json={"password": "AshaPass1"}, headers=admin)
+    asha = auth_headers((await _student_login(client, "WEB1", "W1", "AshaPass1")).json()["access_token"])
+    await client.post(f"{API}/placements/companies", json={"name": "Infosys"}, headers=admin)
+    company = (await client.get(f"{API}/placements/companies", headers=admin)).json()[0]
+    drive = (await client.post(f"{API}/placements/drives", json={"company_id": company["id"], "role_title": "SE", "package_lpa": 4.5}, headers=admin)).json()
+    await client.post(f"{API}/placements/drives/{drive['id']}/apply", headers=asha)
+    application = (await client.get(f"{API}/placements/drives/{drive['id']}/applications", headers=admin)).json()[0]
+    await client.put(f"{API}/placements/applications/{application['id']}/status", json={"status": "selected"}, headers=admin)
+
+    placements = (await client.get(f"{API}/public/schools/WEB1/site")).json()["placements"]
+    assert (placements["recruiters"], placements["students_placed"], placements["highest_package"]) == (["Infosys"], 1, 4.5)
+    assert (await client.put(f"{API}/school-site/customize", json={"hidden_sections": ["placements", "programs"]}, headers=admin)).status_code == 200

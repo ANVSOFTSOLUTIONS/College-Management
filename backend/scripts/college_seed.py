@@ -158,7 +158,37 @@ async def _seed(api: AsyncClient) -> list[tuple[str, str, str]]:
     await call("POST", "/notices", {"title": "Campus placement drive", "body": "12 companies visit campus this month. Final-year students register with the T&P cell.",
                                     "for_staff": True, "for_students": True, "for_parents": True, "is_pinned": True})
     await _seed_campus(call, student_ids, departments)
+    await seed_website(call)
     return logins
+
+
+async def seed_website(call) -> None:
+    """The public website: about, contact, college details, and the University template."""
+    await call("PUT", "/school-site/about-contact", {
+        "about": "ANV College of Engineering, Kavali is an autonomous institution offering engineering, management and computer "
+                 "applications programs on a 40-acre green campus.\nOur students learn by doing: in modern laboratories, on industry "
+                 "projects and through internships from their first year.",
+        "contact": {"address": "NH-16, Musunuru, Kavali, SPSR Nellore District, Andhra Pradesh 524201", "phone": "+91 86262 40000",
+                    "email": "info@anvcollege.in", "map_url": ""},
+    })
+    await call("PUT", "/school-site/college-info", {
+        "established": "1998",
+        "accreditation": "NAAC A+ | AICTE approved | Affiliated to JNTUA",
+        "highlights": [{"value": "27+", "label": "Years of excellence"}, {"value": "4,200+", "label": "Students"},
+                       {"value": "92%", "label": "Placement record"}, {"value": "180+", "label": "Faculty members"}],
+        "programs": [
+            {"name": "B.Tech Computer Science & Engineering", "level": "UG", "duration": "4 years", "seats": "240",
+             "description": "AI, data science and full-stack development with industry projects."},
+            {"name": "B.Tech Electronics & Communication", "level": "UG", "duration": "4 years", "seats": "120",
+             "description": "VLSI, embedded systems and IoT laboratories."},
+            {"name": "MBA", "level": "PG", "duration": "2 years", "seats": "120", "description": "Finance, marketing, HR and business analytics."},
+        ],
+        "principal_name": "Dr. K. Srinivasa Rao",
+        "principal_title": "Principal",
+        "principal_message": "Welcome to ANV College of Engineering. For over two decades we have prepared young people for careers "
+                             "and lives of purpose.\nI invite you to visit our campus and see our students at work.",
+    })
+    await call("PUT", "/school-site/template", {"template": "university"})
 
 
 async def _seed_campus(call, student_ids: dict, departments: dict) -> None:

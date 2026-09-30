@@ -18,6 +18,10 @@ export function customizeSite(token, body) {
   return apiRequest("/school-site/customize", { method: "PUT", token, body });
 }
 
+export function saveCollegeInfo(token, body) {
+  return apiRequest("/school-site/college-info", { method: "PUT", token, body });
+}
+
 export function saveAboutContact(token, about, contact) {
   return apiRequest("/school-site/about-contact", { method: "PUT", token, body: { about, contact } });
 }

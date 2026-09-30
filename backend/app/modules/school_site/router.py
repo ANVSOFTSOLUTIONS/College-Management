@@ -5,6 +5,7 @@ from app.modules.school_site import service
 from app.modules.school_site.schemas import (
     AboutContactRequest,
     ActivityRequest,
+    CollegeInfoRequest,
     CustomizeRequest,
     NoticeRequest,
     SchoolSiteResponse,
@@ -43,6 +44,12 @@ async def choose_template(payload: TemplateRequest, current_user: CurrentUser = 
 async def customize(payload: CustomizeRequest, current_user: CurrentUser = Depends(_admin_only)) -> SchoolSiteResponse:
     """Tagline, own colours on top of the template, and sections to hide."""
     return await service.customize(current_user.school_id, payload)
+
+
+@router.put("/college-info", response_model=SchoolSiteResponse)
+async def save_college_info(payload: CollegeInfoRequest, current_user: CurrentUser = Depends(_admin_only)) -> SchoolSiteResponse:
+    """Year established, accreditation, highlight figures, programs and the principal's message."""
+    return await service.update_college_info(current_user.school_id, payload)
 
 
 @router.post("/notices", response_model=SchoolSiteResponse)

@@ -39,15 +39,17 @@ function initials(name) {
 
 function loginLinks(site) {
   return [
+    { label: "Students", href: `/?as=student&college=${encodeURIComponent(site.code)}` },
     { label: "Parents", href: "/?as=parent" },
-    { label: "Students", href: `/?as=student&school=${encodeURIComponent(site.code)}` },
-    { label: "Staff", href: "/?as=staff" },
+    { label: "Faculty", href: "/?as=staff" },
   ];
 }
 
 const NAV_LINKS = [
   { id: "about", label: "About" },
-  { id: "events", label: "Events" },
+  { id: "programs", label: "Programs" },
+  { id: "placements", label: "Placements" },
+  { id: "events", label: "Campus life" },
   { id: "gallery", label: "Gallery" },
   { id: "notices", label: "Notices" },
   { id: "contact", label: "Contact" },
@@ -57,11 +59,17 @@ function visibleLinks(site) {
   return NAV_LINKS.filter(
     (l) =>
       (l.id === "about" && site.about) ||
+      (l.id === "programs" && (site.programs.length || site.departments.length)) ||
+      (l.id === "placements" && site.placements) ||
       (l.id === "events" && site.activities.length) ||
       (l.id === "gallery" && site.gallery.length) ||
       (l.id === "notices" && site.notices.length) ||
       l.id === "contact",
   );
+}
+
+function applyHref(site) {
+  return site.admissions_open ? `/apply/${encodeURIComponent(site.code)}` : "#contact";
 }
 
 // --- Small building blocks ---------------------------------------------------------
@@ -180,6 +188,47 @@ function Nav({ site, theme }) {
               <LoginMenu site={site} variant="light" />
             </div>
             <MobileMenu site={site} dark />
+          </div>
+        </header>
+      );
+    case "topbar":
+      return (
+        <header className="sticky top-0 z-30 shadow-sm">
+          <div style={{ background: "var(--c-primary)", color: "var(--c-on-primary)" }} className="text-xs">
+            <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2 px-5 py-2">
+              <span className="truncate opacity-90">
+                {[site.accreditation, site.contact.phone && `☎ ${site.contact.phone}`].filter(Boolean).join("   ·   ")}
+              </span>
+              <span className="hidden gap-4 sm:flex">
+                {loginLinks(site).map((l) => (
+                  <a key={l.label} href={l.href} className="font-semibold hover:underline">
+                    {l.label} login
+                  </a>
+                ))}
+              </span>
+            </div>
+          </div>
+          <div style={{ background: "var(--c-surface)" }} className="border-b border-[var(--c-border)]">
+            <div className="relative mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-3">
+              <a href="#top" className="flex min-w-0 items-center gap-3">
+                <Emblem site={site} theme={theme} size="h-12 w-12" />
+                <span className="min-w-0">
+                  <span style={{ fontFamily: "var(--font-heading)", color: "var(--c-primary)" }} className="block truncate text-lg font-bold leading-tight">
+                    {site.name}
+                  </span>
+                  {site.established && <span className="block text-[11px] uppercase tracking-[0.2em] text-[var(--c-muted)]">Estd. {site.established}</span>}
+                </span>
+              </a>
+              <Links site={site} className="gap-5" />
+              <a
+                href={applyHref(site)}
+                style={{ background: "var(--c-accent)", color: "#111827" }}
+                className="hidden shrink-0 rounded-[var(--radius-btn)] px-4 py-2 text-sm font-bold lg:inline-flex"
+              >
+                {site.admissions_open ? "Apply now" : "Enquire"}
+              </a>
+              <MobileMenu site={site} />
+            </div>
           </div>
         </header>
       );
@@ -321,14 +370,110 @@ function heroCopy(site) {
 function Hero({ site, theme }) {
   const banners = site.banners.map((b) => ({ ...b, url: assetUrl(b.url) }));
   const [index, setIndex] = useSlides(banners.length);
-  const primaryCta = <Button href="#contact">Contact us</Button>;
+  const hasPrograms = site.programs.length || site.departments.length;
+  const primaryCta = site.admissions_open ? (
+    <Button href={applyHref(site)}>Apply for admission</Button>
+  ) : (
+    <Button href={hasPrograms ? "#programs" : "#contact"}>{hasPrograms ? "Explore programs" : "Contact us"}</Button>
+  );
   const parentCta = (variant = "ghost") => (
-    <Button href="/?as=parent" variant={variant}>
-      Parent login
+    <Button href={loginLinks(site)[0].href} variant={variant}>
+      Student login
     </Button>
   );
+  const facts = site.highlights.slice(0, 3);
 
   switch (theme.hero) {
+    case "university":
+      return (
+        <section id="top" className="relative overflow-hidden text-white">
+          <div className="relative min-h-[78vh]">
+            {banners.length ? (
+              banners.map((b, i) => (
+                <img key={b.id} src={b.url} alt="" className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-1000 ${i === index ? "opacity-100" : "opacity-0"}`} />
+              ))
+            ) : (
+              <FallbackArt theme={theme} className="absolute inset-0" />
+            )}
+            <div className="absolute inset-0" style={{ background: `linear-gradient(90deg, ${theme.colors.primary}f2 0%, ${theme.colors.primary}b3 40%, transparent 85%)` }} />
+            <div className="relative mx-auto flex min-h-[78vh] max-w-6xl flex-col justify-center px-5 py-20">
+              <p className="text-xs font-bold uppercase tracking-[0.3em]" style={{ color: "var(--c-accent)" }}>
+                {site.established ? `Excellence since ${site.established}` : "Welcome"}
+              </p>
+              <h1 style={{ fontFamily: "var(--font-heading)" }} className="mt-4 max-w-3xl text-4xl font-bold leading-tight sm:text-6xl">
+                {banners[index]?.caption || heroCopy(site)}
+              </h1>
+              <p className="mt-5 max-w-xl text-lg opacity-90">{site.tagline || site.name}</p>
+              <div className="mt-8 flex flex-wrap gap-3">
+                {primaryCta}
+                {parentCta("light")}
+              </div>
+            </div>
+          </div>
+          {facts.length > 0 && (
+            <div className="relative mx-auto -mt-14 max-w-6xl px-5">
+              <div className="grid overflow-hidden rounded-[var(--radius-card)] shadow-2xl sm:grid-cols-3" style={{ background: "var(--c-surface)", color: "var(--c-text)" }}>
+                {facts.map((f, i) => (
+                  <div key={f.label} className={`px-6 py-5 ${i ? "border-t border-[var(--c-border)] sm:border-l sm:border-t-0" : ""}`}>
+                    <p style={{ fontFamily: "var(--font-heading)", color: "var(--c-primary)" }} className="text-3xl font-bold">
+                      {f.value}
+                    </p>
+                    <p className="text-sm text-[var(--c-muted)]">{f.label}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+      );
+    case "admission":
+      return (
+        <section id="top" className="relative overflow-hidden" style={{ background: `linear-gradient(135deg, ${theme.colors.primary}, color-mix(in srgb, ${theme.colors.primary} 70%, #000))`, color: theme.colors.onPrimary }}>
+          <div className="absolute inset-0 opacity-[0.08]" style={{ backgroundImage: "linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px)", backgroundSize: "36px 36px" }} />
+          <div className="absolute -right-24 -top-24 h-96 w-96 rounded-full blur-3xl" style={{ background: `${theme.colors.accent}55` }} />
+          <div className="relative mx-auto grid max-w-6xl items-center gap-10 px-5 py-16 lg:grid-cols-5 lg:py-24">
+            <div className="lg:col-span-3">
+              {site.admissions_open && (
+                <p className="mb-4 inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-bold uppercase tracking-widest" style={{ background: "var(--c-accent)", color: "#111827" }}>
+                  <span className="h-2 w-2 animate-pulse rounded-full bg-current" /> Admissions open
+                </p>
+              )}
+              <h1 style={{ fontFamily: "var(--font-heading)" }} className="text-4xl font-bold leading-[1.1] sm:text-6xl">
+                {heroCopy(site)}
+              </h1>
+              <p className="mt-5 max-w-xl text-lg opacity-85">{site.tagline || site.name}</p>
+              {site.accreditation && <p className="mt-4 text-sm font-semibold opacity-80">✓ {site.accreditation}</p>}
+              <div className="mt-8 flex flex-wrap gap-3">
+                <Button href={applyHref(site)} variant="accent">
+                  {site.admissions_open ? "Apply now" : "Enquire now"}
+                </Button>
+                {parentCta("ghost")}
+              </div>
+            </div>
+            <div className="lg:col-span-2">
+              <div className="overflow-hidden rounded-[calc(var(--radius-card)+8px)] bg-white text-slate-900 shadow-2xl">
+                {banners[0] ? <img src={banners[0].url} alt="" className="aspect-[16/10] w-full object-cover" /> : <FallbackArt theme={theme} className="aspect-[16/10] w-full" />}
+                <div className="p-5">
+                  <p className="text-xs font-bold uppercase tracking-widest" style={{ color: theme.colors.primary }}>
+                    Why choose us
+                  </p>
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                    {(facts.length ? facts : [{ value: "✓", label: "Expert faculty" }, { value: "✓", label: "Modern labs" }, { value: "✓", label: "Placements" }]).map((f) => (
+                      <div key={f.label} className="rounded-xl bg-slate-50 px-2 py-3">
+                        <p className="text-xl font-extrabold" style={{ color: theme.colors.primary }}>
+                          {f.value}
+                        </p>
+                        <p className="text-[11px] leading-tight text-slate-500">{f.label}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          {theme.decoration === "waves" && <Wave color="var(--c-bg)" />}
+        </section>
+      );
     case "slider":
     case "fullbleed": {
       const tall = theme.hero === "fullbleed" ? "min-h-[88vh]" : "min-h-[72vh]";
@@ -400,15 +545,15 @@ function Hero({ site, theme }) {
               <Emblem site={site} theme={theme} size="h-24 w-24" />
             </div>
             <p className="text-xs uppercase tracking-[0.35em]" style={{ color: "var(--c-accent)" }}>
-              ✦ Est. with pride ✦
+              ✦ {site.established ? `Established ${site.established}` : "Welcome"} ✦
             </p>
             <h1 style={{ fontFamily: "var(--font-heading)" }} className="mt-4 text-4xl font-bold sm:text-6xl">
               {site.name}
             </h1>
             <p className="mx-auto mt-5 max-w-2xl text-lg opacity-90">{heroCopy(site)}</p>
             <div className="mt-8 flex flex-wrap justify-center gap-3">
-              <Button href="#contact" variant="accent">
-                Contact us
+              <Button href={applyHref(site)} variant="accent">
+                {site.admissions_open ? "Apply for admission" : "Contact us"}
               </Button>
               {parentCta()}
             </div>
@@ -443,8 +588,8 @@ function Hero({ site, theme }) {
               </h1>
               <p className="mt-6 max-w-xl text-lg opacity-90">{heroCopy(site)}</p>
               <div className="mt-8 flex flex-wrap gap-3">
-                <Button href="#contact" variant={theme.dark ? "primary" : "light"}>
-                  Contact us
+                <Button href={applyHref(site)} variant={theme.dark ? "primary" : "light"}>
+                  {site.admissions_open ? "Apply now" : "Contact us"}
                 </Button>
                 {parentCta()}
               </div>
@@ -469,7 +614,7 @@ function Hero({ site, theme }) {
           <div className="relative mx-auto grid max-w-6xl items-center gap-10 lg:grid-cols-2">
             <div>
               <p className="inline-block -rotate-2 rounded-2xl px-4 py-1 text-sm font-bold text-white" style={{ background: "var(--c-accent)" }}>
-                Hello, little learners! ☺
+                Welcome, future leaders
               </p>
               <h1 style={{ fontFamily: "var(--font-heading)", color: "var(--c-primary)" }} className="mt-4 text-5xl font-extrabold leading-tight sm:text-6xl">
                 {site.name}
@@ -489,7 +634,7 @@ function Hero({ site, theme }) {
                 <FallbackArt theme={theme} className="aspect-square w-full" />
               )}
               <div className="absolute -bottom-3 left-6 rounded-2xl bg-white px-4 py-2 text-sm font-bold shadow-lg" style={{ color: "var(--c-primary)" }}>
-                ★ Learning is fun here
+                ★ Learn · Build · Lead
               </div>
             </div>
           </div>
@@ -653,6 +798,171 @@ function NoticesTicker({ site }) {
   );
 }
 
+function AccreditationStrip({ site, theme }) {
+  if (!site.accreditation || theme.nav === "topbar" || theme.hero === "admission") return null;
+  return (
+    <div style={{ background: "var(--c-primary)", color: "var(--c-on-primary)" }}>
+      <p className="mx-auto max-w-6xl px-5 py-3 text-center text-sm font-semibold tracking-wide">
+        <span style={{ color: "var(--c-accent)" }}>✦</span> {site.accreditation} <span style={{ color: "var(--c-accent)" }}>✦</span>
+      </p>
+    </div>
+  );
+}
+
+function Highlights({ site, theme }) {
+  if (!site.highlights.length || theme.hero === "university") return null;
+  return (
+    <section className="mx-auto max-w-6xl px-5 pt-16">
+      <div className={`grid gap-4 ${site.highlights.length >= 4 ? "grid-cols-2 lg:grid-cols-4" : "grid-cols-2 sm:grid-cols-3"}`}>
+        {site.highlights.map((h) => (
+          <div key={h.label} className={`${cardClass(theme)} p-6 text-center`}>
+            <p style={{ fontFamily: "var(--font-heading)", color: "var(--c-primary)" }} className="text-4xl font-bold">
+              {h.value}
+            </p>
+            <p className="mt-1 text-sm font-medium text-[var(--c-muted)]">{h.label}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function Principal({ site, theme, n }) {
+  if (!site.principal_message) return null;
+  return (
+    <section className="py-20" style={{ background: theme.dark ? "transparent" : "var(--c-surface)" }}>
+      <div className="mx-auto max-w-6xl px-5">
+        <SectionTitle theme={theme} eyebrow="From the desk of" number={n}>
+          {site.principal_title ? `${site.principal_title}'s message` : "Message from the Principal"}
+        </SectionTitle>
+        <div className="grid items-start gap-8 lg:grid-cols-4">
+          <div className="flex flex-col items-center text-center">
+            <span className="flex h-32 w-32 items-center justify-center rounded-full text-4xl font-bold shadow-lg" style={{ background: "var(--c-primary)", color: "var(--c-on-primary)", boxShadow: `0 0 0 6px ${theme.colors.accent}` }}>
+              {initials(site.principal_name || "Principal")}
+            </span>
+            <p style={{ fontFamily: "var(--font-heading)" }} className="mt-5 text-xl font-bold">
+              {site.principal_name}
+            </p>
+            <p className="text-sm text-[var(--c-muted)]">{site.principal_title || "Principal"}</p>
+          </div>
+          <blockquote className="relative lg:col-span-3">
+            <span className="absolute -left-2 -top-8 text-8xl leading-none opacity-20" style={{ color: "var(--c-accent)", fontFamily: "Georgia, serif" }}>
+              “
+            </span>
+            <div className="relative space-y-4 text-lg leading-relaxed">
+              {site.principal_message.split(/\n+/).map((para, i) => (
+                <p key={i}>{para}</p>
+              ))}
+            </div>
+          </blockquote>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Programs({ site, theme, n }) {
+  if (!site.programs.length && !site.departments.length) return null;
+  const levels = [...new Set(site.programs.map((p) => p.level).filter(Boolean))];
+  return (
+    <section id="programs" className="mx-auto max-w-6xl px-5 py-20">
+      <SectionTitle theme={theme} eyebrow="Academics" number={n}>
+        Programs offered
+      </SectionTitle>
+      {site.programs.length > 0 && (
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {site.programs.map((p) => (
+            <article key={p.name} className={`${cardClass(theme)} group flex flex-col p-6 transition hover:-translate-y-1`}>
+              <div className="flex items-center justify-between gap-2">
+                {p.level && (
+                  <span className="rounded-full px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider" style={{ background: "color-mix(in srgb, var(--c-accent) 22%, transparent)" }}>
+                    {p.level}
+                  </span>
+                )}
+                {p.duration && <span className="text-xs font-semibold text-[var(--c-muted)]">{p.duration}</span>}
+              </div>
+              <h3 style={{ fontFamily: "var(--font-heading)" }} className="mt-4 text-xl font-bold leading-snug">
+                {p.name}
+              </h3>
+              {p.description && <p className="mt-2 flex-1 text-sm text-[var(--c-muted)]">{p.description}</p>}
+              {p.seats && (
+                <p className="mt-4 border-t border-[var(--c-border)] pt-3 text-sm">
+                  <span className="font-bold" style={{ color: "var(--c-primary)" }}>
+                    {p.seats}
+                  </span>{" "}
+                  seats
+                </p>
+              )}
+            </article>
+          ))}
+        </div>
+      )}
+      {site.departments.length > 0 && (
+        <div className={site.programs.length ? "mt-12" : ""}>
+          <p className="mb-4 text-sm font-bold uppercase tracking-[0.2em] text-[var(--c-muted)]">Departments</p>
+          <div className="flex flex-wrap gap-3">
+            {site.departments.map((d) => (
+              <span key={d.code} className={`${cardClass(theme)} inline-flex items-center gap-3 px-4 py-3`}>
+                <span className="rounded-md px-2 py-1 text-xs font-bold" style={{ background: "var(--c-primary)", color: "var(--c-on-primary)" }}>
+                  {d.code}
+                </span>
+                <span className="font-medium">{d.name}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+      {levels.length > 1 && <p className="mt-6 text-sm text-[var(--c-muted)]">{levels.join(" · ")} programs</p>}
+    </section>
+  );
+}
+
+function Placements({ site, theme, n }) {
+  const p = site.placements;
+  if (!p) return null;
+  const stats = [
+    p.highest_package && { value: `${p.highest_package} LPA`, label: "Highest package" },
+    p.average_package && { value: `${p.average_package} LPA`, label: "Average package" },
+    { value: `${p.students_placed}+`, label: "Students placed" },
+    p.recruiters.length && { value: `${p.recruiters.length}+`, label: "Recruiters" },
+  ].filter(Boolean);
+  return (
+    <section id="placements" className="relative overflow-hidden py-20" style={{ background: theme.dark ? "var(--c-surface)" : "var(--c-primary)", color: theme.dark ? "var(--c-text)" : "var(--c-on-primary)" }}>
+      <div className="absolute -right-32 -top-32 h-96 w-96 rounded-full opacity-20 blur-3xl" style={{ background: "var(--c-accent)" }} />
+      <div className="relative mx-auto max-w-6xl px-5">
+        <p className="text-xs font-bold uppercase tracking-[0.25em]" style={{ color: "var(--c-accent)" }}>
+          {String(n).padStart(2, "0")} · Training & placements
+        </p>
+        <h2 style={{ fontFamily: "var(--font-heading)" }} className="mt-2 text-3xl font-bold sm:text-4xl">
+          Careers that start here
+        </h2>
+        <div className="mt-10 grid grid-cols-2 gap-4 lg:grid-cols-4">
+          {stats.map((s) => (
+            <div key={s.label} className="rounded-[var(--radius-card)] bg-white/10 p-5 ring-1 ring-white/15 backdrop-blur">
+              <p style={{ fontFamily: "var(--font-heading)" }} className="text-3xl font-bold">
+                {s.value}
+              </p>
+              <p className="text-sm opacity-80">{s.label}</p>
+            </div>
+          ))}
+        </div>
+        {p.recruiters.length > 0 && (
+          <>
+            <p className="mt-12 text-sm font-semibold uppercase tracking-[0.2em] opacity-70">Our recruiters</p>
+            <div className="mt-4 flex flex-wrap gap-3">
+              {p.recruiters.map((r) => (
+                <span key={r} className="rounded-full bg-white px-4 py-2 text-sm font-bold text-slate-800 shadow">
+                  {r}
+                </span>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function About({ site, theme, n }) {
   if (!site.about) return null;
   return (
@@ -679,8 +989,8 @@ function About({ site, theme, n }) {
               </li>
             ))}
             <li>
-              <a href="#contact" className="flex items-center justify-between rounded-lg px-3 py-2 font-semibold transition hover:opacity-80" style={{ background: "color-mix(in srgb, var(--c-accent) 18%, transparent)" }}>
-                Visit / contact us <span aria-hidden="true">→</span>
+              <a href={applyHref(site)} className="flex items-center justify-between rounded-lg px-3 py-2 font-semibold transition hover:opacity-80" style={{ background: "color-mix(in srgb, var(--c-accent) 18%, transparent)" }}>
+                {site.admissions_open ? "Apply for admission" : "Visit / contact us"} <span aria-hidden="true">→</span>
               </a>
             </li>
           </ul>
@@ -696,7 +1006,7 @@ function Events({ site, theme, n }) {
     <section id="events" style={{ background: theme.dark ? "transparent" : "var(--c-surface)" }} className="py-20">
       <div className="mx-auto max-w-6xl px-5">
         <SectionTitle theme={theme} eyebrow="What's happening" number={n}>
-          Events & activities
+          Campus life & events
         </SectionTitle>
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {site.activities.slice(0, 6).map((a) => (
@@ -860,6 +1170,7 @@ function Footer({ site, theme }) {
             </span>
           </div>
           {site.contact.address && <p className="mt-3 text-sm opacity-80">{site.contact.address}</p>}
+          {site.accreditation && <p className="mt-2 text-xs font-semibold opacity-80">{site.accreditation}</p>}
         </div>
         <div className="text-sm">
           <p className="mb-2 font-semibold uppercase tracking-wider opacity-70">Explore</p>
@@ -912,6 +1223,13 @@ function SiteRenderer({ site: rawSite, templateId }) {
     activities: hidden.has("events") ? [] : rawSite.activities,
     gallery: hidden.has("gallery") ? [] : rawSite.gallery,
     notices: hidden.has("notices") ? [] : rawSite.notices,
+    established: rawSite.established ?? "",
+    accreditation: rawSite.accreditation ?? "",
+    highlights: hidden.has("highlights") ? [] : (rawSite.highlights ?? []),
+    programs: hidden.has("programs") ? [] : (rawSite.programs ?? []),
+    departments: hidden.has("programs") ? [] : (rawSite.departments ?? []),
+    placements: hidden.has("placements") ? null : (rawSite.placements ?? null),
+    principal_message: hidden.has("principal") ? "" : (rawSite.principal_message ?? ""),
   };
   const theme = customise(themeFor(templateId), rawSite);
   useThemeFonts(theme);
@@ -932,21 +1250,30 @@ function SiteRenderer({ site: rawSite, templateId }) {
     color: c.text,
     fontFamily: theme.fonts.body,
   };
-  const numbered = [site.about, site.activities.length, site.gallery.length, site.notices.length, true];
   let counter = 0;
   const n = (present) => (present ? ++counter : counter);
   const sections = (
     <>
+      <AccreditationStrip site={site} theme={theme} />
       <NoticesTicker site={site} />
-      <About site={site} theme={theme} n={n(numbered[0])} />
-      <Events site={site} theme={theme} n={n(numbered[1])} />
-      <Gallery site={site} theme={theme} n={n(numbered[2])} />
-      <Notices site={site} theme={theme} n={n(numbered[3])} />
-      <Contact site={site} theme={theme} n={n(numbered[4])} />
+      <Highlights site={site} theme={theme} />
+      <About site={site} theme={theme} n={n(site.about)} />
+      <Principal site={site} theme={theme} n={n(site.principal_message)} />
+      <Programs site={site} theme={theme} n={n(site.programs.length || site.departments.length)} />
+      <Placements site={site} theme={theme} n={n(site.placements)} />
+      <Events site={site} theme={theme} n={n(site.activities.length)} />
+      <Gallery site={site} theme={theme} n={n(site.gallery.length)} />
+      <Notices site={site} theme={theme} n={n(site.notices.length)} />
+      <Contact site={site} theme={theme} n={n(true)} />
       <Footer site={site} theme={theme} />
     </>
   );
-  const dots = theme.decoration === "dots" ? { backgroundImage: `radial-gradient(${c.border} 1.2px, transparent 1.2px)`, backgroundSize: "22px 22px" } : {};
+  const dots =
+    theme.decoration === "dots"
+      ? { backgroundImage: `radial-gradient(${c.border} 1.2px, transparent 1.2px)`, backgroundSize: "22px 22px" }
+      : theme.decoration === "grid" && !theme.dark
+        ? { backgroundImage: `linear-gradient(${c.border}88 1px, transparent 1px), linear-gradient(90deg, ${c.border}88 1px, transparent 1px)`, backgroundSize: "40px 40px" }
+        : {};
 
   return (
     <div style={{ ...style, ...dots }} className="min-h-screen overflow-x-clip antialiased">
@@ -956,7 +1283,7 @@ function SiteRenderer({ site: rawSite, templateId }) {
           style={{ background: "var(--c-primary)", color: "var(--c-on-primary)", borderRadius: "999px" }}
           className="fixed bottom-5 right-5 z-40 px-5 py-3 text-sm font-bold shadow-xl ring-4 ring-white/60 transition hover:scale-105"
         >
-          🎓 Apply for admission
+          🎓 Apply for admission {new Date().getFullYear()}
         </a>
       )}
       <style>{"@keyframes site-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } } @media (prefers-reduced-motion: reduce) { [class*='site-marquee'] { animation: none !important; } }"}</style>

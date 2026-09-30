@@ -39,6 +39,17 @@ class Settings(BaseSettings):
     sms_msg91_template_remark: str = ""
     sms_msg91_template_fee: str = ""
 
+    # Outgoing email (demo requests from the landing page). Off until SMTP_HOST is set.
+    # Port 587 uses STARTTLS; set SMTP_USE_SSL=true for port 465.
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_use_ssl: bool = False
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""
+    # Who gets an email for every demo request (comma-separated).
+    demo_request_emails: str = "support@anvsoftsolutions.com,sales@anvsoftsolutions.com"
+
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=False)
 
     @property

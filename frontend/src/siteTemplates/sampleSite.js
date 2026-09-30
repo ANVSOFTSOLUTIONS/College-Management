@@ -5,6 +5,39 @@ const photo = (id, w = 1600) => `https://images.unsplash.com/${id}?auto=format&f
 export const SAMPLE_SITE = {
   name: "Green Valley College of Engineering",
   code: "SAMPLE",
+  tagline: "Autonomous institution offering engineering, management and computer applications.",
+  established: "1998",
+  accreditation: "NAAC A+ | NBA accredited | AICTE approved | Affiliated to JNTUA",
+  highlights: [
+    { value: "27+", label: "Years of excellence" },
+    { value: "4,200+", label: "Students" },
+    { value: "92%", label: "Placement record" },
+    { value: "180+", label: "Faculty members" },
+  ],
+  programs: [
+    { name: "B.Tech Computer Science", level: "UG", duration: "4 years", seats: "240", description: "AI, data science and full-stack development with industry projects." },
+    { name: "B.Tech Electronics & Communication", level: "UG", duration: "4 years", seats: "120", description: "VLSI, embedded systems and IoT labs." },
+    { name: "B.Tech Mechanical", level: "UG", duration: "4 years", seats: "60", description: "Design, manufacturing and robotics." },
+    { name: "M.Tech Data Science", level: "PG", duration: "2 years", seats: "18", description: "Machine learning, big data and research." },
+    { name: "MBA", level: "PG", duration: "2 years", seats: "120", description: "Finance, marketing, HR and business analytics." },
+    { name: "MCA", level: "PG", duration: "2 years", seats: "60", description: "Software engineering and cloud computing." },
+  ],
+  departments: [
+    { name: "Computer Science & Engineering", code: "CSE" },
+    { name: "Electronics & Communication", code: "ECE" },
+    { name: "Mechanical Engineering", code: "MECH" },
+    { name: "Business Administration", code: "MBA" },
+  ],
+  placements: {
+    recruiters: ["TCS", "Infosys", "Wipro", "Accenture", "Cognizant", "HCLTech", "Capgemini", "Amara Raja", "Zoho", "Deloitte"],
+    students_placed: 612,
+    highest_package: 18.5,
+    average_package: 4.8,
+  },
+  principal_name: "Dr. K. Srinivasa Rao",
+  principal_title: "Principal",
+  principal_message:
+    "Welcome to Green Valley College of Engineering. For over two decades we have prepared young people not just for jobs, but for lives of purpose and leadership.\n\nOur faculty, laboratories and industry partnerships give every student the chance to learn by doing. I invite you to visit our campus and see it for yourself.",
   logo_url: null,
   banners: [
     { id: "b1", url: photo("photo-1580582932707-520aed937b7b"), caption: "Learn, build and lead." },

@@ -6,10 +6,13 @@ from pydantic import BaseModel, EmailStr, Field, field_validator
 from app.core.modules import LEGACY_MODULES, OPTIONAL_MODULES
 
 # Public-site templates; the frontend renders each (frontend/src/siteTemplates).
-TEMPLATE_IDS = ["classic", "modern", "vibrant", "emerald", "royal", "neon", "sunrise", "ocean", "editorial", "split"]
+TEMPLATE_IDS = [
+    "classic", "modern", "vibrant", "emerald", "royal", "neon", "sunrise", "ocean", "editorial", "split",
+    "university", "engineering", "medical", "business", "arts",
+]
 ALLOWED_TEMPLATES = set(TEMPLATE_IDS)
 # Every school can use these; the rest need Pro (switched on by the super admin once paid).
-FREE_TEMPLATES = ["classic", "modern"]
+FREE_TEMPLATES = ["classic", "modern", "university"]
 
 
 def auto_template(code: str) -> str:

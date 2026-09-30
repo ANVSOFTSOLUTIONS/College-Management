@@ -36,6 +36,31 @@ class NoticeItem(BaseModel):
     date: str
 
 
+class HighlightItem(BaseModel):
+    value: str = Field(min_length=1, max_length=20)
+    label: str = Field(min_length=1, max_length=60)
+
+
+class ProgramItem(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    level: str = Field(default="", max_length=40)  # UG, PG, Diploma, Ph.D
+    duration: str = Field(default="", max_length=40)
+    seats: str = Field(default="", max_length=20)
+    description: str = Field(default="", max_length=400)
+
+
+class DepartmentItem(BaseModel):
+    name: str
+    code: str
+
+
+class PlacementSummary(BaseModel):
+    recruiters: list[str]
+    students_placed: int
+    highest_package: float | None
+    average_package: float | None
+
+
 class SchoolSiteResponse(BaseModel):
     school_id: str
     name: str
@@ -55,6 +80,25 @@ class SchoolSiteResponse(BaseModel):
     accent_color: str | None = None
     hidden_sections: list[str] = []
     pro_templates: bool = False  # whether the school may choose Pro templates
+    established: str = ""
+    accreditation: str = ""
+    highlights: list[HighlightItem] = []
+    programs: list[ProgramItem] = []
+    principal_name: str = ""
+    principal_title: str = ""
+    principal_message: str = ""
+    departments: list[DepartmentItem] = []  # from the college's departments
+    placements: PlacementSummary | None = None  # public site, when the placements module is on and someone is placed
+
+
+class CollegeInfoRequest(BaseModel):
+    established: str = Field(default="", max_length=10)
+    accreditation: str = Field(default="", max_length=300)
+    highlights: list[HighlightItem] = Field(default_factory=list, max_length=6)
+    programs: list[ProgramItem] = Field(default_factory=list, max_length=40)
+    principal_name: str = Field(default="", max_length=150)
+    principal_title: str = Field(default="", max_length=100)
+    principal_message: str = Field(default="", max_length=3000)
 
 
 class AboutContactRequest(BaseModel):
@@ -82,7 +126,9 @@ class CustomizeRequest(BaseModel):
     tagline: str = Field(default="", max_length=200)
     primary_color: str | None = Field(default=None, pattern=_HEX)
     accent_color: str | None = Field(default=None, pattern=_HEX)
-    hidden_sections: list[Literal["about", "events", "gallery", "notices"]] = Field(default_factory=list)
+    hidden_sections: list[Literal["about", "events", "gallery", "notices", "highlights", "programs", "placements", "principal"]] = Field(
+        default_factory=list
+    )
 
     @field_validator("tagline", mode="before")
     @classmethod

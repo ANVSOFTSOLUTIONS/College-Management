@@ -3,11 +3,13 @@
 import uuid
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Request, status
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from app.api.deps import CurrentUser, require_roles
+from app.core.config import get_settings
 from app.core.errors import AppError
+from app.core.mailer import send_email
 from app.core.phone import normalize_indian_mobile
 from app.core.rate_limit import is_rate_limited, record_attempt
 from app.db.helpers import execute, fetch_all, fetch_one
@@ -80,8 +82,34 @@ async def platform_contact() -> PlatformContact:
     return await _contact()
 
 
+def _demo_email(payload: DemoRequestIn) -> tuple[str, str]:
+    subject = f"New demo request: {payload.institution} ({payload.city or 'city not given'})"
+    lines = [
+        "A new demo request came in from the ANV College ERP website.",
+        "",
+        f"Name:        {payload.name}",
+        f"College:     {payload.institution}",
+        f"Phone:       {payload.phone}",
+        f"Email:       {payload.email or '-'}",
+        f"City:        {payload.city or '-'}",
+        f"Students:    {payload.students or '-'}",
+        "",
+        "Message:",
+        payload.message or "-",
+        "",
+        "It is also listed under Super admin > Demo requests.",
+    ]
+    return subject, "\n".join(lines)
+
+
+async def _notify_team(payload: DemoRequestIn) -> None:
+    recipients = [a.strip() for a in get_settings().demo_request_emails.split(",") if a.strip()]
+    subject, body = _demo_email(payload)
+    await send_email(recipients, subject, body, reply_to=str(payload.email) or None)
+
+
 @public_router.post("/demo-requests", status_code=status.HTTP_202_ACCEPTED)
-async def request_demo(payload: DemoRequestIn, request: Request) -> dict:
+async def request_demo(payload: DemoRequestIn, request: Request, background: BackgroundTasks) -> dict:
     client = request.client.host if request.client else "unknown"
     key = f"demo:{client}"
     if is_rate_limited(key, max_attempts=5, window_seconds=3600):
@@ -99,6 +127,8 @@ async def request_demo(payload: DemoRequestIn, request: Request) -> dict:
         (str(uuid.uuid4()), payload.name, payload.institution, payload.phone, str(payload.email).lower(), payload.city,
          payload.students, payload.message),
     )
+    # After the lead is saved, so a mail problem never loses it.
+    background.add_task(_notify_team, payload)
     return {"received": True}
 
 

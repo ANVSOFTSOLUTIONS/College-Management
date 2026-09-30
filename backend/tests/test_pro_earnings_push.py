@@ -59,7 +59,7 @@ async def test_new_schools_get_a_free_template(db, client):
     for code in ("FREEA", "FREEB", "FREEC", "FREED"):
         body = {"name": code, "code": code, "admin_email": f"{code.lower()}@example.com", "admin_full_name": "A", "admin_password": PASSWORD}
         school = (await client.post(f"{API}/super-admin/schools", json=body, headers=root)).json()["school"]
-        assert school["template"] in ("classic", "modern") and school["pro_templates"] is False
+        assert school["template"] in ("classic", "modern", "university") and school["pro_templates"] is False
 
 
 # --- Website customisation --------------------------------------------------------------------

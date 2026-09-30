@@ -1,3 +1,4 @@
+import json
 import uuid
 
 import aiomysql
@@ -11,13 +12,48 @@ from app.modules.super_admin.schemas import FREE_TEMPLATES
 from app.modules.school_site.schemas import (
     ActivityItem,
     BannerItem,
+    CollegeInfoRequest,
     ContactInfo,
     CustomizeRequest,
+    DepartmentItem,
     GalleryItem,
+    HighlightItem,
     NoticeItem,
+    PlacementSummary,
+    ProgramItem,
     SchoolSiteResponse,
 )
 from app.modules.school_site.storage import delete_uploaded_file
+
+
+def _json_list(value, model) -> list:
+    try:
+        return [model(**item) for item in json.loads(value or "[]")]
+    except (TypeError, ValueError):
+        return []
+
+
+async def _placements(school_id: str) -> PlacementSummary | None:
+    """Recruiters and results for the public site; None until someone is placed."""
+    from app.modules.placements.service import stats  # imported here: placements pulls in exams
+
+    summary = await stats(school_id)
+    if not summary.students_placed:
+        return None
+    recruiters = await fetch_all(
+        """
+        SELECT c.name FROM placement_companies c
+        WHERE c.school_id = %s AND EXISTS (SELECT 1 FROM placement_drives d WHERE d.company_id = c.id)
+        ORDER BY c.name LIMIT 24
+        """,
+        (school_id,),
+    )
+    return PlacementSummary(
+        recruiters=[r["name"] for r in recruiters],
+        students_placed=summary.students_placed,
+        highest_package=summary.highest_package,
+        average_package=summary.average_package,
+    )
 
 
 async def _to_response(school: dict, site: dict) -> SchoolSiteResponse:
@@ -65,6 +101,17 @@ async def _to_response(school: dict, site: dict) -> SchoolSiteResponse:
         accent_color=site["accent_color"],
         hidden_sections=[x for x in site["hidden_sections"].split(",") if x],
         pro_templates=bool(school["pro_templates"]),
+        established=site["established"],
+        accreditation=site["accreditation"],
+        highlights=_json_list(site["highlights"], HighlightItem),
+        programs=_json_list(site["programs"], ProgramItem),
+        principal_name=site["principal_name"],
+        principal_title=site["principal_title"],
+        principal_message=site["principal_message"] or "",
+        departments=[
+            DepartmentItem(name=d["name"], code=d["code"])
+            for d in await fetch_all("SELECT name, code FROM departments WHERE school_id = %s ORDER BY name", (school["id"],))
+        ],
     )
 
 
@@ -109,8 +156,33 @@ async def get_public_site(identifier: str) -> SchoolSiteResponse:
         raise AppError(status.HTTP_404_NOT_FOUND, "school_not_found", "School not found.")
     site = await get_or_create_site(school["id"])
     response = await _to_response(school, site)
-    response.admissions_open = "admissions" in await school_modules(school["id"]) and await admissions.is_open(school["id"])
+    modules = await school_modules(school["id"])
+    response.admissions_open = "admissions" in modules and await admissions.is_open(school["id"])
+    if "placements" in modules:
+        response.placements = await _placements(school["id"])
     return response
+
+
+async def update_college_info(school_id: str, payload: CollegeInfoRequest) -> SchoolSiteResponse:
+    await get_or_create_site(school_id)
+    await execute(
+        """
+        UPDATE school_sites SET established = %s, accreditation = %s, highlights = %s, programs = %s,
+               principal_name = %s, principal_title = %s, principal_message = %s
+        WHERE school_id = %s
+        """,
+        (
+            payload.established.strip(),
+            payload.accreditation.strip(),
+            json.dumps([h.model_dump() for h in payload.highlights]),
+            json.dumps([p.model_dump() for p in payload.programs]),
+            payload.principal_name.strip(),
+            payload.principal_title.strip(),
+            payload.principal_message.strip(),
+            school_id,
+        ),
+    )
+    return await get_site_for_school(school_id)
 
 
 async def update_about_contact(school_id: str, *, about: str, contact: ContactInfo) -> SchoolSiteResponse:

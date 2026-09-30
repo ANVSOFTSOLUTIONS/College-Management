@@ -5,6 +5,7 @@ import {
   addNotice,
   chooseTemplate,
   customizeSite,
+  saveCollegeInfo,
   deleteActivity,
   deleteBanner,
   deleteGalleryImage,
@@ -39,11 +40,147 @@ function TemplateThumbnail({ site, templateId }) {
 }
 
 const SECTIONS = [
+  ["highlights", "Highlights"],
   ["about", "About"],
-  ["events", "Events"],
+  ["principal", "Principal's message"],
+  ["programs", "Programs & departments"],
+  ["placements", "Placements"],
+  ["events", "Campus life"],
   ["gallery", "Gallery"],
   ["notices", "Notices"],
 ];
+
+const EMPTY_PROGRAM = { name: "", level: "UG", duration: "", seats: "", description: "" };
+
+// Year established, accreditation, highlight figures, programs offered and the principal's message.
+function CollegeInfoCard({ token, site, onChanged }) {
+  const [form, setForm] = useState(() => ({
+    established: site.established ?? "",
+    accreditation: site.accreditation ?? "",
+    highlights: site.highlights?.length ? site.highlights : [{ value: "", label: "" }],
+    programs: site.programs ?? [],
+    principal_name: site.principal_name ?? "",
+    principal_title: site.principal_title ?? "Principal",
+    principal_message: site.principal_message ?? "",
+  }));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  const setList = (key, index, field, value) =>
+    setForm({ ...form, [key]: form[key].map((item, i) => (i === index ? { ...item, [field]: value } : item)) });
+  const removeAt = (key, index) => setForm({ ...form, [key]: form[key].filter((_, i) => i !== index) });
+
+  async function save() {
+    setSaving(true);
+    setError(null);
+    try {
+      const body = {
+        ...form,
+        highlights: form.highlights.filter((h) => h.value.trim() && h.label.trim()),
+        programs: form.programs.filter((pr) => pr.name.trim()),
+      };
+      onChanged(await saveCollegeInfo(token, body), "College details saved.");
+    } catch (err) {
+      setError(errorMessage(err, "Couldn't save the college details."));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const small = "rounded-lg border border-slate-300 px-3 py-2 text-sm";
+  return (
+    <Card title="College details" hint="Shown across every template: the accreditation strip, highlight figures, programs and the principal's message.">
+      <div className="grid gap-3 sm:grid-cols-4">
+        <label className="text-sm font-medium text-slate-700">
+          Established
+          <input value={form.established} maxLength={10} placeholder="1998" onChange={(e) => setForm({ ...form, established: e.target.value })} className={INPUT} />
+        </label>
+        <label className="text-sm font-medium text-slate-700 sm:col-span-3">
+          Accreditation & affiliation
+          <input
+            value={form.accreditation}
+            maxLength={300}
+            placeholder="NAAC A+ | AICTE approved | Affiliated to JNTUA"
+            onChange={(e) => setForm({ ...form, accreditation: e.target.value })}
+            className={INPUT}
+          />
+        </label>
+      </div>
+
+      <div>
+        <p className="text-sm font-medium text-slate-700">Highlight figures (up to 6)</p>
+        <div className="mt-1 space-y-2">
+          {form.highlights.map((h, i) => (
+            <div key={i} className="flex gap-2">
+              <input aria-label="Figure" placeholder="92%" maxLength={20} value={h.value} onChange={(e) => setList("highlights", i, "value", e.target.value)} className={`${small} w-28`} />
+              <input aria-label="Label" placeholder="Placement record" maxLength={60} value={h.label} onChange={(e) => setList("highlights", i, "label", e.target.value)} className={`${small} flex-1`} />
+              <button type="button" onClick={() => removeAt("highlights", i)} className="px-2 text-slate-400 hover:text-rose-600" aria-label="Remove">
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+        {form.highlights.length < 6 && (
+          <button type="button" onClick={() => setForm({ ...form, highlights: [...form.highlights, { value: "", label: "" }] })} className="mt-2 text-sm font-semibold text-emerald-700">
+            + Add figure
+          </button>
+        )}
+      </div>
+
+      <div>
+        <p className="text-sm font-medium text-slate-700">Programs offered</p>
+        <p className="text-xs text-slate-400">Your departments show automatically; list the courses you want to advertise here.</p>
+        <div className="mt-2 space-y-3">
+          {form.programs.map((pr, i) => (
+            <div key={i} className="grid gap-2 rounded-lg border border-slate-200 p-3 sm:grid-cols-6">
+              <input aria-label="Program name" placeholder="B.Tech Computer Science" maxLength={120} value={pr.name} onChange={(e) => setList("programs", i, "name", e.target.value)} className={`${small} sm:col-span-3`} />
+              <select aria-label="Level" value={pr.level} onChange={(e) => setList("programs", i, "level", e.target.value)} className={small}>
+                {["UG", "PG", "Diploma", "Ph.D", "Certificate", "Intermediate"].map((l) => (
+                  <option key={l}>{l}</option>
+                ))}
+              </select>
+              <input aria-label="Duration" placeholder="4 years" maxLength={40} value={pr.duration} onChange={(e) => setList("programs", i, "duration", e.target.value)} className={small} />
+              <input aria-label="Seats" placeholder="Seats" maxLength={20} value={pr.seats} onChange={(e) => setList("programs", i, "seats", e.target.value)} className={small} />
+              <input
+                aria-label="Description"
+                placeholder="One line about the program"
+                maxLength={400}
+                value={pr.description}
+                onChange={(e) => setList("programs", i, "description", e.target.value)}
+                className={`${small} sm:col-span-5`}
+              />
+              <button type="button" onClick={() => removeAt("programs", i)} className="text-sm font-semibold text-rose-600">
+                Remove
+              </button>
+            </div>
+          ))}
+        </div>
+        <button type="button" onClick={() => setForm({ ...form, programs: [...form.programs, { ...EMPTY_PROGRAM }] })} className="mt-2 text-sm font-semibold text-emerald-700">
+          + Add program
+        </button>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="text-sm font-medium text-slate-700">
+          Principal / Director name
+          <input value={form.principal_name} maxLength={150} onChange={(e) => setForm({ ...form, principal_name: e.target.value })} className={INPUT} />
+        </label>
+        <label className="text-sm font-medium text-slate-700">
+          Title
+          <input value={form.principal_title} maxLength={100} placeholder="Principal" onChange={(e) => setForm({ ...form, principal_title: e.target.value })} className={INPUT} />
+        </label>
+        <label className="text-sm font-medium text-slate-700 sm:col-span-2">
+          Message
+          <textarea rows={4} maxLength={3000} value={form.principal_message} onChange={(e) => setForm({ ...form, principal_message: e.target.value })} className={INPUT} />
+        </label>
+      </div>
+      {error && <p className="text-sm font-medium text-rose-600">{error}</p>}
+      <button type="button" disabled={saving} onClick={save} className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60">
+        {saving ? "Saving…" : "Save college details"}
+      </button>
+    </Card>
+  );
+}
 
 // Tagline, own colours on top of the template, and which sections show. Previewed live.
 function CustomizeCard({ token, site, previewSite, onChanged }) {
@@ -93,7 +230,7 @@ function CustomizeCard({ token, site, previewSite, onChanged }) {
         </div>
         <label className="block text-sm font-medium text-slate-700">
           Tagline <span className="font-normal text-slate-400">(shown under your college name)</span>
-          <input value={form.tagline} maxLength={200} placeholder="e.g. Learning with joy since 1998" onChange={(e) => setForm({ ...form, tagline: e.target.value })} className={INPUT} />
+          <input value={form.tagline} maxLength={200} placeholder="e.g. Autonomous institution | Excellence in engineering since 1998" onChange={(e) => setForm({ ...form, tagline: e.target.value })} className={INPUT} />
         </label>
         <div className="flex flex-wrap gap-6">
           {colour("primary_color", "Main colour", theme.colors.primary)}
@@ -306,6 +443,8 @@ function ContentTab({ token, site, onChanged }) {
     <div className="space-y-5">
       {error && <p className="rounded-lg bg-rose-50 px-4 py-2 text-sm font-medium text-rose-700">{error}</p>}
 
+      <CollegeInfoCard token={token} site={site} onChanged={onChanged} />
+
       <Card title="Logo" hint="Square PNG or JPG works best.">
         <div className="flex items-center gap-4">
           {site.logo_url ? <img src={assetUrl(site.logo_url)} alt="" className="h-16 w-16 rounded-full border object-contain p-1" /> : <div className="h-16 w-16 rounded-full bg-slate-100" />}
@@ -508,7 +647,7 @@ function SchoolSitePage() {
       </div>
       <div role="tablist" className="flex gap-1 rounded-lg bg-slate-100 p-1 text-sm font-semibold">
         {[
-          ["design", "Design (10 templates)"],
+          ["design", `Design (${THEMES.length} templates)`],
           ["content", "Content"],
         ].map(([id, label]) => (
           <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)} className={`rounded-md px-4 py-1.5 ${tab === id ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}>

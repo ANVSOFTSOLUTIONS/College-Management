@@ -7,9 +7,11 @@ name: Deploy to cPanel
 #      branch — the branch cPanel's repository checks out.
 #   3. Tell cPanel to pull `deploy` and run .cpanel.yml, which only copies
 #      files, installs Python packages, and restarts the backend.
-# Manual until the CPANEL_* secrets for the college hosting are set in this repo; then add
-# `push: branches: [main]` back to deploy on every push.
+# Deploys the college site (college.anvsoftsolutions.com / collegeapi.anvsoftsolutions.com)
+# on every push to main, and on demand from the Actions tab.
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 concurrency:

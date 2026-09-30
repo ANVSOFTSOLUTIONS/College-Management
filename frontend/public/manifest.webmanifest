@@ -1,6 +1,6 @@
 {
-  "name": "School Management",
-  "short_name": "School",
+  "name": "ANV College ERP",
+  "short_name": "ANV College",
   "description": "Attendance, marks, fees, and messages for students, parents, and teachers.",
   "id": "/",
   "start_url": "/login?source=app",

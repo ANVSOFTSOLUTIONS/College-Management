@@ -12,6 +12,9 @@ deployment:
     - export FRONTEND_PATH=/home/goldenle/college.anvsoftsolutions.com
     - export BACKEND_PATH=/home/goldenle/college_backend
     - export BACKEND_VENV=/home/goldenle/virtualenv/college_backend/3.11/bin
+    # The repository was added to cPanel as an existing clone, so cPanel's "Update from
+    # Remote" may not fetch; pull the latest deploy branch here (runs in the repository).
+    - /bin/bash -c "git fetch origin deploy && git merge --ff-only FETCH_HEAD"
     - /bin/bash -c "test -f frontend/dist/index.html || (echo 'frontend/dist missing - deploy the deploy branch, not main' && exit 1)"
     - /bin/bash -c "mkdir -p $FRONTEND_PATH && rsync -a --delete --exclude=.well-known --exclude=cgi-bin frontend/dist/ $FRONTEND_PATH/"
     - /bin/bash -c "mkdir -p $BACKEND_PATH && rsync -a --delete --exclude=uploads --exclude=private_uploads --exclude=.env --exclude=tmp --exclude=public --exclude=.htaccess --exclude=stderr.log --exclude=__pycache__ --exclude=tests --exclude=migrations backend/ $BACKEND_PATH/"

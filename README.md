@@ -92,6 +92,7 @@ school_management/
 │   ├── requirements.txt         runtime packages (requirements-dev.txt adds test tools)
 │   └── .env.example             every setting, documented
 │
+├── mobile/                      React Native (Expo) app for students, parents and faculty (see mobile/README.md)
 ├── frontend/                    React + Vite + Tailwind CSS, installable PWA
 │   ├── public/                  icons, manifest, service worker
 │   └── src/
@@ -203,6 +204,35 @@ The older `python -m scripts.dev_seed` (a super admin and two sample schools) st
 
 Demo accounts on the live site are listed in [docs/DEMO_LOGINS.md](docs/DEMO_LOGINS.md).
 
+## Mobile app (students, parents, faculty)
+
+One React Native (Expo) app in [`mobile/`](mobile/) for students, parents and
+faculty, using the same API. The sign-in screen has **Student**, **Parent** and
+**Faculty** tabs; the app then shows that role's screens. Admins and office staff
+use the website.
+
+| Role | Signs in with | In the app |
+|---|---|---|
+| Student | College code + roll number | Attendance %, fees due, results with SGPA / CGPA, assignments, notices, timetable, leave, hostel room, bus route, library books, placement drives (apply / withdraw) |
+| Parent | Mobile number | The same for each child (switch between children), without placements |
+| Faculty | College email | Punch in / out, mark attendance, enter marks, post assignments, timetable, notices, leave |
+
+Run it on a phone (same Wi-Fi as your PC):
+
+```
+cd backend
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+cd mobile
+copy .env.example .env        # set EXPO_PUBLIC_API_URL=http://<your-PC-IP>:8000/api/v1
+npm install
+npx expo start                # scan the QR code with the Expo Go app
+```
+
+Play Store builds use EAS (`npx eas-cli@latest build --platform android --profile production`)
+and need the live **https** API in `EXPO_PUBLIC_API_URL`. Details, demo logins and
+build profiles: [mobile/README.md](mobile/README.md).
+
 ## Online payments
 
 1. **Super admin** → Colleges → Edit → tick the gateways the college may use (Razorpay, Cashfree, PhonePe; Demo only for demo colleges).
@@ -221,6 +251,9 @@ pytest                  # uses a separate school_management_test database
 
 cd frontend
 npm run build
+
+cd mobile
+npx expo export --platform android   # checks the app bundles
 ```
 
 ## Deployment

@@ -151,3 +151,25 @@ async def test_students_see_student_notices(db, client):
         assert (await client.post(f"{API}/notices", json=body, headers=admin)).status_code == 201
     titles = [n["title"] for n in (await client.get(f"{API}/notices", headers=headers)).json()]
     assert titles == ["Exam timetable out"]
+
+
+async def test_student_app_calls(db, client):
+    """The calls the mobile app makes for a student: home, assignments, timetable, leave."""
+    admin, hod = await _college(client, "COL5")
+    batch = (await client.post(f"{API}/classes", json={"name": "BBA", "section": "A", "academic_year": "2026", "class_teacher_id": hod["id"]}, headers=admin)).json()
+    student = (await client.post(f"{API}/students", json={"admission_number": "S5", "full_name": "Sita", "class_id": batch["id"]}, headers=admin)).json()
+    await client.post(f"{API}/students/{student['id']}/login", json={"password": "SitaPass1"}, headers=admin)
+    headers = auth_headers((await _student_login(client, "COL5", "S5", "SitaPass1")).json()["access_token"])
+
+    children = (await client.get(f"{API}/me/parent/children", headers=headers)).json()
+    sid = children[0]["student_id"]
+    assert (await client.get(f"{API}/me/parent/children/{sid}", headers=headers)).status_code == 200
+    assert (await client.get(f"{API}/homework", params={"student_id": sid}, headers=headers)).status_code == 200
+    assert (await client.get(f"{API}/timetable/mine", params={"student_id": sid}, headers=headers)).status_code == 200
+    for what in ("library", "hostel", "transport"):
+        assert (await client.get(f"{API}/me/parent/children/{sid}/{what}", headers=headers)).status_code == 200
+    body = {"student_id": sid, "leave_type": "sick", "from_date": "2026-10-05", "to_date": "2026-10-06", "reason": "Fever"}
+    applied = await client.post(f"{API}/leave", json=body, headers=headers)
+    assert applied.status_code == 201, applied.text
+    mine = (await client.get(f"{API}/leave/mine", headers=headers)).json()
+    assert [(l["applicant_name"], l["days"]) for l in mine] == [("Sita", 2)]

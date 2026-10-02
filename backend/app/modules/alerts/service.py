@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from app.api.deps import CurrentUser
 from app.core.config import get_settings
 from app.db.helpers import execute, fetch_all, fetch_one
-from app.integrations.sms import get_sms_sender
+from app.integrations.sms import get_sms_sender, get_whatsapp_sender
 
 # Schools on this platform are in India; "today" for absence alerts is IST.
 IST = timezone(timedelta(hours=5, minutes=30))
@@ -49,11 +49,13 @@ class AlertOut(BaseModel):
 class AlertSettingsOut(BaseModel):
     sms_enabled: bool
     provider: str
+    whatsapp_enabled: bool = False
 
 
 def alert_settings() -> AlertSettingsOut:
     settings = get_settings()
-    return AlertSettingsOut(sms_enabled=settings.sms_enabled, provider=settings.sms_provider if settings.sms_enabled else "")
+    return AlertSettingsOut(sms_enabled=settings.sms_enabled, provider=settings.sms_provider if settings.sms_enabled else "",
+                            whatsapp_enabled=settings.whatsapp_enabled)
 
 
 async def _context(student_id: str) -> dict | None:
@@ -91,6 +93,15 @@ async def create_alert(
     if phone:
         result = await get_sms_sender().send(phone, message, kind, variables)
         status, detail, message_id = result.status, result.detail, result.message_id
+        whatsapp = get_whatsapp_sender()
+        if whatsapp is not None:
+            wa = await whatsapp.send(phone, message, kind, variables)
+            # Sent if either channel delivered; both outcomes are kept in the detail.
+            detail = "; ".join(x for x in (f"SMS: {status}" + (f" ({detail})" if detail else ""), f"WhatsApp: {wa.status}" + (f" ({wa.detail})" if wa.detail else "")))
+            if wa.status == "sent":
+                status, message_id = "sent", message_id or wa.message_id
+            elif status != "sent" and wa.status == "failed":
+                status = "failed"
     else:
         status, detail, message_id = "not_sent", "No parent phone number on file.", ""
 
@@ -216,3 +227,52 @@ async def list_alerts(user: CurrentUser, *, class_id: str | None, student_id: st
         )
         for row in rows
     ]
+
+
+class BulkAlertResult(BaseModel):
+    students: int
+    sent: int
+    failed: int
+    not_sent: int
+    already_sent_today: int
+
+
+async def _tally(ids: list[str | None]) -> BulkAlertResult:
+    created = [i for i in ids if i]
+    counts = {"sent": 0, "failed": 0, "not_sent": 0}
+    if created:
+        rows = await fetch_all(
+            f"SELECT status, COUNT(*) AS n FROM parent_alerts WHERE id IN ({', '.join(['%s'] * len(created))}) GROUP BY status", tuple(created)
+        )
+        for r in rows:
+            counts[r["status"]] = counts.get(r["status"], 0) + r["n"]
+    return BulkAlertResult(students=len(ids), sent=counts["sent"], failed=counts["failed"], not_sent=counts["not_sent"],
+                           already_sent_today=len(ids) - len(created))
+
+
+async def _send_all(jobs: list[dict]) -> BulkAlertResult:
+    semaphore = asyncio.Semaphore(_SEND_CONCURRENCY)
+
+    async def one(job: dict) -> str | None:
+        async with semaphore:
+            return await create_alert(**job)
+
+    return await _tally(list(await asyncio.gather(*(one(j) for j in jobs))))
+
+
+def _result_message(exam_name: str, outcome: str):
+    def build(ctx: dict):
+        variables = {"student": ctx["full_name"], "class": f"{ctx['class_name']} {ctx['section']}", "date": today_ist().strftime("%d %b %Y"),
+                     "school": ctx["school_name"], "exam": exam_name, "result": outcome}
+        return f"Dear Parent, {exam_name} results of {ctx['full_name']}: {outcome}. See the app for details. - {ctx['school_name']}", variables
+
+    return build
+
+
+async def alert_results(exam_id: str, exam_name: str, outcomes: dict[str, str], author_id: str) -> BulkAlertResult:
+    """One message per student when an exam's results are published; outcomes maps student id to e.g. 'SGPA 8.4, passed'."""
+    return await _send_all([
+        {"student_id": sid, "kind": "result", "dedupe_key": f"result:{exam_id}:{sid}", "build_message": _result_message(exam_name, outcome),
+         "created_by": author_id}
+        for sid, outcome in outcomes.items()
+    ])

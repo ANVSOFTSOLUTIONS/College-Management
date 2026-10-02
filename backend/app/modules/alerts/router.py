@@ -22,3 +22,4 @@ async def list_alerts(
 @router.get("/settings", response_model=AlertSettingsOut)
 async def alert_settings(current_user: CurrentUser = Depends(_staff)) -> AlertSettingsOut:
     return service.alert_settings()
+

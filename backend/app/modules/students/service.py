@@ -19,7 +19,7 @@ from app.modules.students.schemas import (
 )
 
 _RELATIONS = ("father", "mother", "guardian")
-_STUDENT_FIELDS = ("date_of_birth", "gender", "blood_group", "admission_date", "address", "email", "phone", "quota")
+_STUDENT_FIELDS = ("date_of_birth", "gender", "blood_group", "admission_date", "address", "email", "phone", "quota", "social_category")
 
 _FORBIDDEN = AppError(status.HTTP_403_FORBIDDEN, "forbidden", "Only this class's class teacher or an admin can do that.")
 _NOT_FOUND = AppError(status.HTTP_404_NOT_FOUND, "student_not_found", "Student not found.")
@@ -150,6 +150,7 @@ async def _detail(row: dict) -> StudentDetail:
         email=row["email"] or "",
         phone=row["phone"] or "",
         quota=row["quota"],
+        social_category=row["social_category"],
         status=row["status"],
         class_=ClassRef(**class_row),
         primary_contact=row["primary_contact"],
@@ -237,8 +238,8 @@ async def insert_student(cur, school_id: str, payload: CreateStudentRequest) -> 
     await cur.execute(
         """
         INSERT INTO students (id, school_id, class_id, admission_number, full_name, date_of_birth, gender,
-                              blood_group, admission_date, address, primary_contact, email, phone, quota)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                              blood_group, admission_date, address, primary_contact, email, phone, quota, social_category)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         """,
         (
             student_id,
@@ -255,6 +256,7 @@ async def insert_student(cur, school_id: str, payload: CreateStudentRequest) -> 
             str(payload.email).lower() or None,
             payload.phone or None,
             payload.quota,
+            payload.social_category,
         ),
     )
     for relation in _RELATIONS:

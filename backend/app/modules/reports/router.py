@@ -5,7 +5,8 @@ from fastapi import APIRouter, Depends
 
 from app.api.deps import CurrentUser, require_roles
 from app.core.modules import require_module
-from app.modules.reports import performance, service
+from app.modules.reports import naac, performance, service
+from app.modules.reports.naac import NaacReport
 from app.modules.reports.performance import ExamPerformance
 from app.modules.reports.service import StaffAttendanceReport, StudentAttendanceReport
 
@@ -48,3 +49,15 @@ async def fee_dues(class_id: str | None = None, only_with_dues: bool = True, cur
 async def exam_performance(exam_id: str, current_user: CurrentUser = Depends(_staff)) -> ExamPerformance:
     """Class and subject averages, grade spread, toppers and students who failed or missed a paper."""
     return await performance.exam_performance(current_user, exam_id)
+
+
+@router.get("/naac", dependencies=_reports_on, response_model=NaacReport)
+async def naac_report(current_user: CurrentUser = Depends(_admin)) -> NaacReport:
+    """Students, faculty, results, attendance, placements, feedback and grievances, tagged with NAAC criteria."""
+    return await naac.report(current_user)
+
+
+@router.get("/naac.xlsx", dependencies=_reports_on)
+async def naac_xlsx(current_user: CurrentUser = Depends(_admin)):
+    """The NAAC / AISHE data as an Excel workbook, one sheet per table."""
+    return naac.to_xlsx(await naac.report(current_user))

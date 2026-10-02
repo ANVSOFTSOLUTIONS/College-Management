@@ -43,6 +43,8 @@ first sign-in.
 - **Electives:** elective slots with seats per subject; students choose in the app (first come, first served), the admin can close or reassign; attendance, mark sheets and results count an elective only for students who chose it
 - **Semester promotion with detention rules:** set max backlogs and min attendance, see who breaks them, detain them into a junior batch, and move the batch to the next semester (next semester subjects added automatically) or pass it out
 - **Anonymous faculty feedback:** students rate each subject's faculty on five questions in the app; the admin sees all scores and comments, HODs their department, faculty their own after the round closes
+- **Grievances:** students, parents and faculty raise tickets in the app (ragging / harassment marked urgent and alerted at once); the office replies, resolves or closes on the web, and the raiser is notified
+- **NAAC / AISHE data:** students by programme, gender, social category and quota; faculty by designation; pass %, attendance, placements, feedback and grievance redressal, each tagged with its NAAC criterion, with an Excel download
 - **Faculty** designations (Professor, Assistant Professor …); student email, mobile and admission quota (Convener, Management …)
 - **Library:** catalogue with copies, issue / renew / return to students and faculty, loan limit, overdue list and per-day fines
 - **Hostel:** hostels (boys / girls), rooms with beds, allocate / move / vacate students; students and parents see the room, roommates and warden

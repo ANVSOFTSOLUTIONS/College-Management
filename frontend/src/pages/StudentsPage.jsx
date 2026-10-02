@@ -28,6 +28,7 @@ const RELATIONS = [
 ];
 const EMPTY_GUARDIAN = { full_name: "", phone: "", email: "", occupation: "", relation_label: "" };
 const QUOTAS = ["Convener", "Management", "NRI", "Lateral entry", "Spot admission"];
+const SOCIAL_CATEGORIES = ["OC", "BC-A", "BC-B", "BC-C", "BC-D", "BC-E", "SC", "ST", "EWS"];
 
 function studentSlip(credentials) {
   return {
@@ -70,6 +71,7 @@ function emptyForm(classId) {
     email: "",
     phone: "",
     quota: "",
+    social_category: "",
     father: null,
     mother: null,
     guardian: null,
@@ -90,6 +92,7 @@ function detailToForm(detail) {
     email: detail.email ?? "",
     phone: detail.phone ?? "",
     quota: detail.quota ?? "",
+    social_category: detail.social_category ?? "",
     father: null,
     mother: null,
     guardian: null,
@@ -546,6 +549,16 @@ function StudentForm({ token, classes, studentId, defaultClassId, isAdmin, onSav
               <option key={q} value={q} />
             ))}
           </datalist>
+        </Field>
+        <Field id="student-category" label="Social category">
+          <select id="student-category" value={form.social_category} onChange={(e) => setField("social_category", e.target.value)} className={INPUT_CLASS}>
+            <option value="">Not set</option>
+            {SOCIAL_CATEGORIES.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
         </Field>
         <Field id="student-address" label="Address" wide>
           <input id="student-address" value={form.address} onChange={(e) => setField("address", e.target.value)} className={INPUT_CLASS} />

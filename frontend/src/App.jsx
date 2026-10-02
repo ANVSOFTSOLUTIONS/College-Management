@@ -31,6 +31,8 @@ import PerformancePage from "./pages/PerformancePage";
 import PlacementsPage, { MyPlacementsPage } from "./pages/PlacementsPage";
 import ElectivesPage from "./pages/ElectivesPage";
 import FeedbackPage from "./pages/FeedbackPage";
+import GrievancesPage from "./pages/GrievancesPage";
+import NaacPage from "./pages/NaacPage";
 import PromotionPage from "./pages/PromotionPage";
 import SemesterPromotionPage from "./pages/SemesterPromotionPage";
 import PunchPage from "./pages/PunchPage";
@@ -88,6 +90,8 @@ const NAV_ITEMS = [
   { id: "reports", label: "Reports", roles: ["admin", "teacher"], module: "reports" },
   { id: "performance", label: "Performance", roles: ["admin", "teacher"], module: "performance" },
   { id: "feedback", label: "Faculty feedback", roles: ["admin"] },
+  { id: "grievances", label: "Grievances", roles: ["admin"] },
+  { id: "naac", label: "NAAC / AISHE data", roles: ["admin"], module: "reports" },
   { id: "app-links", label: "App & QR codes", roles: ["admin"] },
   { id: "activity", label: "Activity log", roles: ["admin"] },
   { id: "my-children", label: "My Children", roles: ["parent"] },
@@ -188,6 +192,8 @@ function AuthenticatedApp() {
     if (activeNav === "semester-promotion") return <SemesterPromotionPage />;
     if (activeNav === "electives") return <ElectivesPage />;
     if (activeNav === "feedback") return <FeedbackPage />;
+    if (activeNav === "grievances") return <GrievancesPage />;
+    if (activeNav === "naac") return <NaacPage />;
     if (activeNav === "my-children" || activeNav === "my-portal") return <ParentPortalPage />;
     if (activeNav === "school-site") return <SchoolSitePage />;
     return <ComingSoon label={activeLabel} />;

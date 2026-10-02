@@ -41,12 +41,13 @@ class _StudentFields(BaseModel):
     email: EmailStr | Literal[""] = ""
     phone: str = Field(default="", max_length=15)
     quota: str = Field(default="", max_length=20)
+    social_category: str = Field(default="", max_length=10)
     father: GuardianIn | None = None
     mother: GuardianIn | None = None
     guardian: GuardianIn | None = None
     primary_contact: Relation | Literal[""] = ""
 
-    _strip_text = field_validator("blood_group", "address", "phone", "quota", mode="before")(_strip)
+    _strip_text = field_validator("blood_group", "address", "phone", "quota", "social_category", mode="before")(_strip)
 
 
 def _check_primary_contact(model):
@@ -78,13 +79,14 @@ class UpdateStudentRequest(BaseModel):
     email: EmailStr | Literal[""] | None = None
     phone: str | None = Field(default=None, max_length=15)
     quota: str | None = Field(default=None, max_length=20)
+    social_category: str | None = Field(default=None, max_length=10)
     father: GuardianIn | None = None
     mother: GuardianIn | None = None
     guardian: GuardianIn | None = None
     primary_contact: Relation | Literal[""] | None = None
     status: StudentStatus | None = None
 
-    _strip_text = field_validator("admission_number", "full_name", "blood_group", "address", "phone", "quota", mode="before")(_strip)
+    _strip_text = field_validator("admission_number", "full_name", "blood_group", "address", "phone", "quota", "social_category", mode="before")(_strip)
 
 
 class ClassRef(BaseModel):
@@ -119,6 +121,7 @@ class StudentDetail(BaseModel):
     email: str = ""
     phone: str = ""
     quota: str = ""
+    social_category: str = ""
     status: StudentStatus
     class_: ClassRef = Field(serialization_alias="class")
     primary_contact: str

@@ -601,3 +601,130 @@ export function FeedbackScreen({ childId }) {
     </Screen>
   );
 }
+
+const GRIEVANCE_CATEGORIES = [
+  { value: "academic", label: "Academic" },
+  { value: "examination", label: "Exams" },
+  { value: "fees", label: "Fees" },
+  { value: "hostel", label: "Hostel" },
+  { value: "transport", label: "Transport" },
+  { value: "infrastructure", label: "Infrastructure" },
+  { value: "ragging", label: "Ragging" },
+  { value: "harassment", label: "Harassment" },
+  { value: "other", label: "Other" },
+];
+const GRIEVANCE_TONE = { open: "amber", in_progress: "blue", resolved: "green", closed: "slate" };
+const GRIEVANCE_LABEL = { open: "Open", in_progress: "In progress", resolved: "Resolved", closed: "Closed" };
+
+function GrievanceThread({ id, onBack }) {
+  const { token } = useAuth();
+  const ticket = useApi(`/grievances/${id}`);
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+
+  async function send() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`/grievances/${id}/replies`, { method: "POST", token, body: { message } });
+      setMessage("");
+      ticket.reload();
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const t = ticket.data;
+  return (
+    <Screen title={t ? t.ticket_number : "Grievance"} refreshing={ticket.loading} onRefresh={ticket.reload}>
+      <Button title="Back to my grievances" kind="secondary" small onPress={onBack} style={{ alignSelf: "flex-start" }} />
+      <Loader loading={ticket.loading && !t} error={ticket.error} onRetry={ticket.reload}>
+        {t && (
+          <>
+            <Card>
+              <Row style={{ justifyContent: "space-between" }}>
+                <Muted>{t.category_label}</Muted>
+                <Badge text={GRIEVANCE_LABEL[t.status]} tone={GRIEVANCE_TONE[t.status]} />
+              </Row>
+              <H>{t.subject}</H>
+              <Text style={{ color: colors.text, marginTop: 6 }}>{t.description}</Text>
+            </Card>
+            {t.replies.map((r) => (
+              <Card key={r.id} style={r.from_office ? { backgroundColor: "#ecfdf5", marginLeft: 24 } : { marginRight: 24 }}>
+                <Muted>{r.from_office ? "College office" : "You"}</Muted>
+                <Text style={{ color: colors.text, marginTop: 2 }}>{r.message}</Text>
+              </Card>
+            ))}
+            {t.status !== "closed" && (
+              <Card>
+                <Input label="Reply" value={message} onChangeText={setMessage} multiline style={{ minHeight: 60, textAlignVertical: "top" }} />
+                <Message error={error} />
+                <Button title="Send" onPress={send} loading={busy} disabled={!message.trim()} />
+              </Card>
+            )}
+          </>
+        )}
+      </Loader>
+    </Screen>
+  );
+}
+
+/** Raise a grievance with the college office and follow the replies. Students, parents and faculty. */
+export function GrievancesScreen({ childId }) {
+  const { token } = useAuth();
+  const mine = useApi("/grievances/mine");
+  const [form, setForm] = useState({ category: "academic", subject: "", description: "" });
+  const [open, setOpen] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState(null);
+  const [error, setError] = useState(null);
+
+  async function raise() {
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const t = await api("/grievances", { method: "POST", token, body: { ...form, student_id: childId || null } });
+      setMessage(`Raised ${t.ticket_number}. The office will reply here.`);
+      setForm({ category: "academic", subject: "", description: "" });
+      mine.reload();
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (open) return <GrievanceThread id={open} onBack={() => (setOpen(null), mine.reload())} />;
+  const urgent = form.category === "ragging" || form.category === "harassment";
+  return (
+    <Screen title="Grievances" subtitle="Tell the college office about a problem" refreshing={mine.loading} onRefresh={mine.reload}>
+      <Card>
+        <H>Raise a grievance</H>
+        <View style={{ height: 8 }} />
+        <Chips options={GRIEVANCE_CATEGORIES} value={form.category} onChange={(v) => setForm({ ...form, category: v })} />
+        {urgent && <Muted style={{ color: colors.danger, marginTop: 6 }}>Marked urgent: the principal's office is alerted immediately.</Muted>}
+        <Input label="Subject" value={form.subject} onChangeText={(v) => setForm({ ...form, subject: v })} />
+        <Input label="Details" value={form.description} onChangeText={(v) => setForm({ ...form, description: v })} multiline style={{ minHeight: 90, textAlignVertical: "top" }} />
+        <Message text={message} error={error} />
+        <Button title="Submit" onPress={raise} loading={busy} disabled={form.subject.trim().length < 3 || form.description.trim().length < 10} />
+      </Card>
+      <Loader loading={mine.loading && !mine.data} error={mine.error} onRetry={mine.reload}>
+        {(mine.data ?? []).map((g) => (
+          <Card key={g.id} onPress={() => setOpen(g.id)}>
+            <Row style={{ justifyContent: "space-between" }}>
+              <Muted>
+                {g.ticket_number} · {g.category_label}
+              </Muted>
+              <Badge text={GRIEVANCE_LABEL[g.status]} tone={GRIEVANCE_TONE[g.status]} />
+            </Row>
+            <Text style={{ fontWeight: "700", color: colors.text, marginTop: 4 }}>{g.subject}</Text>
+          </Card>
+        ))}
+      </Loader>
+    </Screen>
+  );
+}

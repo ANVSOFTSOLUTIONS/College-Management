@@ -44,6 +44,7 @@ from app.modules.school_site.storage import UPLOAD_ROOT
 from app.modules.staff_attendance.router import punch_router, router as staff_attendance_router, settings_router as school_settings_router
 from app.modules.students.router import router as students_router
 from app.modules.electives.router import portal_router as electives_portal_router, router as electives_router
+from app.modules.grievances.router import router as grievances_router
 from app.modules.feedback.router import portal_router as feedback_portal_router, router as feedback_router
 from app.modules.subject_attendance.router import portal_router as subject_attendance_portal_router, router as subject_attendance_router
 from app.modules.teaching.router import remarks_router, teaching_router
@@ -88,6 +89,7 @@ app.include_router(electives_router, prefix=settings.api_prefix)
 app.include_router(electives_portal_router, prefix=settings.api_prefix)
 app.include_router(feedback_router, prefix=settings.api_prefix)
 app.include_router(feedback_portal_router, prefix=settings.api_prefix)
+app.include_router(grievances_router, prefix=settings.api_prefix)
 app.include_router(parent_logins_router, prefix=settings.api_prefix)
 app.include_router(students_router, prefix=settings.api_prefix)
 app.include_router(teaching_router, prefix=settings.api_prefix)

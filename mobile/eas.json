@@ -6,11 +6,23 @@
   "build": {
     "preview": {
       "distribution": "internal",
-      "android": { "buildType": "apk" }
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://collegeapi.anvsoftsolutions.com/api/v1",
+        "EXPO_PUBLIC_WEB_URL": "https://college.anvsoftsolutions.com"
+      }
     },
     "production": {
       "autoIncrement": true,
-      "android": { "buildType": "app-bundle" }
+      "android": {
+        "buildType": "app-bundle"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://collegeapi.anvsoftsolutions.com/api/v1",
+        "EXPO_PUBLIC_WEB_URL": "https://college.anvsoftsolutions.com"
+      }
     }
   },
   "submit": {

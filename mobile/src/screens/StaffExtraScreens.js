@@ -380,3 +380,62 @@ export function SubjectAttendanceScreen() {
     </Screen>
   );
 }
+
+function FeedbackRows({ report }) {
+  return report.faculty.map((f) => (
+    <Card key={`${f.teacher_id}|${f.subject_name}|${f.class_name}|${f.section}`}>
+      <Row style={{ justifyContent: "space-between" }}>
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontWeight: "700", color: colors.text }}>{f.teacher_name}</Text>
+          <Muted>
+            {f.subject_name} · {f.class_name}-{f.section} · {f.responses}/{f.students} responses
+          </Muted>
+        </View>
+        <Text style={{ fontSize: 22, fontWeight: "800", color: f.overall >= 4 ? colors.brand : f.overall >= 3 ? "#f59e0b" : colors.danger }}>{f.overall.toFixed(1)}</Text>
+      </Row>
+      {report.questions.map((q, i) => (
+        <Row key={q} style={{ justifyContent: "space-between", marginTop: 4 }}>
+          <Muted style={{ flex: 1 }}>{q}</Muted>
+          <Text style={{ fontWeight: "700", color: colors.text }}>{f.averages[i].toFixed(1)}</Text>
+        </Row>
+      ))}
+      {f.comments.map((c, i) => (
+        <Text key={i} style={{ color: colors.text, marginTop: 6, fontStyle: "italic" }}>
+          &quot;{c}&quot;
+        </Text>
+      ))}
+    </Card>
+  ));
+}
+
+/** Faculty: own feedback scores (closed rounds). HOD: also the department's scores for any round. */
+export function FeedbackScoresScreen() {
+  const mine = useApi("/feedback/mine");
+  const rounds = useApi("/feedback/rounds");
+  const [roundId, setRoundId] = useState(null);
+  const selected = roundId ?? rounds.data?.[0]?.id ?? null;
+  const department = useApi(selected ? `/feedback/rounds/${selected}/report` : null);
+  const isHod = Boolean(department.data) && !department.error;
+
+  return (
+    <Screen title="Feedback" subtitle="Students' anonymous ratings, out of 5" refreshing={mine.loading} onRefresh={() => [mine, rounds, department].forEach((q) => q.reload())}>
+      <Loader loading={mine.loading && !mine.data} error={mine.error} onRetry={mine.reload}>
+        <H>My scores</H>
+        {(mine.data ?? []).length === 0 && <Muted>No closed feedback rounds with your subjects yet.</Muted>}
+        {(mine.data ?? []).map((r) => (
+          <View key={r.round.id}>
+            <Muted style={{ marginTop: 8 }}>{r.round.title}</Muted>
+            <FeedbackRows report={r} />
+          </View>
+        ))}
+      </Loader>
+      {isHod && (
+        <View style={{ marginTop: 16 }}>
+          <H>My department</H>
+          <Chips options={(rounds.data ?? []).map((r) => ({ value: r.id, label: r.title }))} value={selected} onChange={setRoundId} />
+          {department.data.faculty.length === 0 ? <Muted>No responses yet.</Muted> : <FeedbackRows report={department.data} />}
+        </View>
+      )}
+    </Screen>
+  );
+}

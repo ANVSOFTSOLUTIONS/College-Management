@@ -6,10 +6,12 @@ import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { AuthProvider, useApi, useAuth } from "./src/auth";
 import { AttendanceScreen, FacultyAssignmentsScreen, MarksScreen, PunchScreen } from "./src/screens/FacultyScreens";
 import { ChangePasswordScreen, LoginScreen } from "./src/screens/LoginScreen";
-import { DepartmentScreen, LeaveInboxScreen, PayslipsScreen, RemarksScreen, SubjectAttendanceScreen } from "./src/screens/StaffExtraScreens";
+import { DepartmentScreen, FeedbackScoresScreen, LeaveInboxScreen, PayslipsScreen, RemarksScreen, SubjectAttendanceScreen } from "./src/screens/StaffExtraScreens";
 import {
   AssignmentsScreen,
   ChildPicker,
+  ElectivesScreen,
+  FeedbackScreen,
   HomeScreen,
   LeaveScreen,
   NoticesScreen,
@@ -38,6 +40,9 @@ const PORTAL_TABS = [
 const MORE_ITEMS = [
   { id: "subject-attendance", label: "Subject attendance", roles: ["teacher"] },
   { id: "leave-inbox", label: "Leave requests to approve", roles: ["teacher"] },
+  { id: "feedback-scores", label: "Feedback from students", roles: ["teacher"] },
+  { id: "electives", label: "Electives", roles: ["student", "parent"] },
+  { id: "feedback", label: "Faculty feedback", roles: ["student"] },
   { id: "remarks", label: "Student remarks", roles: ["teacher"] },
   { id: "timetable", label: "Timetable", module: "timetable", roles: ["student", "parent", "teacher"] },
   { id: "notices", label: "Notice board", module: "notices", roles: ["teacher"] },
@@ -138,6 +143,7 @@ function FacultyApp() {
           department: <DepartmentScreen onOpenLeaves={() => openMore("leave-inbox")} />,
           "leave-inbox": <LeaveInboxScreen />,
           "subject-attendance": <SubjectAttendanceScreen />,
+          "feedback-scores": <FeedbackScoresScreen />,
           remarks: <RemarksScreen />,
           payslips: <PayslipsScreen />,
           punch: <PunchScreen />,
@@ -182,6 +188,8 @@ function PortalApp() {
           notices: <NoticesScreen />,
           timetable: <TimetableScreen childId={childId} header={header} />,
           placements: <PlacementsScreen />,
+          electives: <ElectivesScreen childId={childId} header={header} />,
+          feedback: <FeedbackScreen childId={childId} />,
           leave: <LeaveScreen childId={childId} header={header} />,
           password: <ChangePasswordScreen />,
         })[id]

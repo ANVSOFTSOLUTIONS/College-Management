@@ -29,7 +29,10 @@ import ParentPortalPage from "./pages/ParentPortalPage";
 import PayrollPage, { MyPayslipsPage } from "./pages/PayrollPage";
 import PerformancePage from "./pages/PerformancePage";
 import PlacementsPage, { MyPlacementsPage } from "./pages/PlacementsPage";
+import ElectivesPage from "./pages/ElectivesPage";
+import FeedbackPage from "./pages/FeedbackPage";
 import PromotionPage from "./pages/PromotionPage";
+import SemesterPromotionPage from "./pages/SemesterPromotionPage";
 import PunchPage from "./pages/PunchPage";
 import ReportsPage from "./pages/ReportsPage";
 import SchoolSitePage from "./pages/SchoolSitePage";
@@ -56,7 +59,9 @@ const NAV_ITEMS = [
   { id: "departments", label: "Departments", roles: ["admin"] },
   { id: "teachers", label: "Faculty", roles: ["admin"] },
   { id: "classes", label: "Batches & Subjects", roles: ["admin"] },
-  { id: "promotion", label: "Promote to next semester", roles: ["admin"] },
+  { id: "electives", label: "Electives", roles: ["admin"] },
+  { id: "semester-promotion", label: "Promote to next semester", roles: ["admin"] },
+  { id: "promotion", label: "New academic year", roles: ["admin"] },
   { id: "certificates", label: "ID cards & certificates", roles: ["admin"], module: "certificates" },
   { id: "students", label: "Students", roles: ["admin", "teacher"] },
   { id: "attendance", label: "Student Attendance", roles: ["admin", "teacher"] },
@@ -82,6 +87,7 @@ const NAV_ITEMS = [
   { id: "school-site", label: "College Website", roles: ["admin"], module: "school-site" },
   { id: "reports", label: "Reports", roles: ["admin", "teacher"], module: "reports" },
   { id: "performance", label: "Performance", roles: ["admin", "teacher"], module: "performance" },
+  { id: "feedback", label: "Faculty feedback", roles: ["admin"] },
   { id: "app-links", label: "App & QR codes", roles: ["admin"] },
   { id: "activity", label: "Activity log", roles: ["admin"] },
   { id: "my-children", label: "My Children", roles: ["parent"] },
@@ -179,6 +185,9 @@ function AuthenticatedApp() {
     if (activeNav === "punch") return <PunchPage />;
     if (activeNav === "leave") return <LeavePage />;
     if (activeNav === "promotion") return <PromotionPage />;
+    if (activeNav === "semester-promotion") return <SemesterPromotionPage />;
+    if (activeNav === "electives") return <ElectivesPage />;
+    if (activeNav === "feedback") return <FeedbackPage />;
     if (activeNav === "my-children" || activeNav === "my-portal") return <ParentPortalPage />;
     if (activeNav === "school-site") return <SchoolSitePage />;
     return <ComingSoon label={activeLabel} />;

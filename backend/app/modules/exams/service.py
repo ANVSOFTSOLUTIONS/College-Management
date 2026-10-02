@@ -23,6 +23,7 @@ from app.db.database import db
 from app.db.helpers import execute, fetch_all, fetch_one
 from app.modules.alerts import service as alerts
 from app.modules.audit import service as audit
+from app.modules.electives.service import elective_roster
 from app.modules.exams.schemas import (
     BacklogOut,
     ClassResults,
@@ -336,7 +337,8 @@ async def _roster(paper: dict) -> list[str]:
     exam = await fetch_one("SELECT exam_type, published_at FROM exams WHERE id = %s", (paper["exam_id"],))
     if exam["exam_type"] != "supplementary":
         rows = await fetch_all("SELECT id FROM students WHERE class_id = %s AND status = 'active'", (paper["class_id"],))
-        return [r["id"] for r in rows]
+        chosen = await elective_roster(paper["class_id"], paper["subject_id"])
+        return [r["id"] for r in rows if chosen is None or r["id"] in chosen]
     rows = await fetch_all(
         """
         SELECT DISTINCT m.student_id AS id FROM exam_marks m
@@ -540,6 +542,7 @@ async def _class_results(exam: dict, class_row: dict) -> ClassResults:
     supplementary = exam["exam_type"] == "supplementary"
     weight = Decimal(exam["internal_weight"] or 0) if exam["exam_type"] == "semester" else Decimal(0)
     internals = await _internal_percentages(_internal_ids(exam), class_row["id"]) if weight else {}
+    electives = {p["id"]: await elective_roster(class_row["id"], p["subject_id"]) for p in papers}
 
     results = []
     for student in students:
@@ -548,6 +551,8 @@ async def _class_results(exam: dict, class_row: dict) -> ClassResults:
             entry = marks.get((paper["id"], student["id"]))
             if entry is None and supplementary:
                 continue  # only backlog subjects are written in a supplementary exam
+            if entry is None and electives[paper["id"]] is not None and student["id"] not in electives[paper["id"]]:
+                continue  # an elective the student didn't choose
             if entry is None:
                 complete, passed = False, False
                 paper_results.append(PaperResult(subject_name=paper["subject_name"], max_marks=_f(paper["max_marks"]),
@@ -592,7 +597,7 @@ async def _class_results(exam: dict, class_row: dict) -> ClassResults:
                 )
             )
         percentage = round(float(total * 100 / max_total), 2) if max_total else None
-        is_complete = complete and bool(paper_results if supplementary else papers)
+        is_complete = complete and bool(paper_results)
         if supplementary and not paper_results:
             continue  # not writing anything in this supplementary exam
         results.append(

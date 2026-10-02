@@ -17,6 +17,7 @@ from app.api.deps import CurrentUser
 from app.core.errors import AppError
 from app.db.database import db
 from app.db.helpers import fetch_all, fetch_one
+from app.modules.electives.service import elective_roster
 
 Status = Literal["present", "absent", "late"]
 REQUIRED_PERCENT = 75.0
@@ -124,6 +125,9 @@ async def sheet(user: CurrentUser, class_id: str, subject_id: str, day: date, pe
         """,
         (subject_id, day, period, class_id),
     )
+    chosen = await elective_roster(class_id, subject_id)
+    if chosen is not None:
+        rows = [r for r in rows if r["id"] in chosen]
     return Sheet(
         class_id=class_id, subject_id=subject_id, subject_name=subject["subject_name"], date=day, period=period,
         marked=any(r["status"] for r in rows),
@@ -134,6 +138,9 @@ async def sheet(user: CurrentUser, class_id: str, subject_id: str, day: date, pe
 async def save(user: CurrentUser, payload: SaveSheetIn) -> Sheet:
     await _require_subject(user, payload.class_id, payload.subject_id)
     roster = {r["id"] for r in await fetch_all("SELECT id FROM students WHERE class_id = %s AND status = 'active'", (payload.class_id,))}
+    chosen = await elective_roster(payload.class_id, payload.subject_id)
+    if chosen is not None:
+        roster &= chosen
     if any(r.student_id not in roster for r in payload.records):
         raise AppError(status.HTTP_400_BAD_REQUEST, "unknown_student", "Some students aren't in this batch.")
     async with db.pool.acquire() as conn:

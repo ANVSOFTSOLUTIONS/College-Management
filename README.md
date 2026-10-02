@@ -40,6 +40,9 @@ first sign-in.
 - **Internal + external marks:** a semester-end exam can include internal exams (e.g. mid exams 30 + semester 70 = 100); grade sheets show internal, external and total
 - **Backlogs & supplementary exams:** failed / absent subjects are tracked per student and per batch; a supplementary exam lists only students with that backlog, and a pass replaces the F in CGPA
 - **Subject-wise attendance:** marked per subject and period by the subject's faculty (web and app); percentages per subject with the 75% rule flagged for students, parents and faculty
+- **Electives:** elective slots with seats per subject; students choose in the app (first come, first served), the admin can close or reassign; attendance, mark sheets and results count an elective only for students who chose it
+- **Semester promotion with detention rules:** set max backlogs and min attendance, see who breaks them, detain them into a junior batch, and move the batch to the next semester (next semester subjects added automatically) or pass it out
+- **Anonymous faculty feedback:** students rate each subject's faculty on five questions in the app; the admin sees all scores and comments, HODs their department, faculty their own after the round closes
 - **Faculty** designations (Professor, Assistant Professor …); student email, mobile and admission quota (Convener, Management …)
 - **Library:** catalogue with copies, issue / renew / return to students and faculty, loan limit, overdue list and per-day fines
 - **Hostel:** hostels (boys / girls), rooms with beds, allocate / move / vacate students; students and parents see the room, roommates and warden

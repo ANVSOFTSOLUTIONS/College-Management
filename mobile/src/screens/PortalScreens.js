@@ -447,3 +447,157 @@ export function PlacementsScreen() {
     </Screen>
   );
 }
+
+/** Elective slots of the batch: students pick a subject while the slot is open; parents see the choice. */
+export function ElectivesScreen({ childId, header }) {
+  const { token, user } = useAuth();
+  const groups = useApi(childId ? `/me/parent/children/${childId}/electives` : null);
+  const [error, setError] = useState(null);
+  const [message, setMessage] = useState(null);
+  const canChoose = user.role === "student";
+
+  async function choose(group, option) {
+    setError(null);
+    setMessage(null);
+    try {
+      await api(`/me/parent/children/${childId}/electives/${group.id}`, { method: "POST", token, body: { option_id: option.id } });
+      setMessage(`${option.subject_name} chosen for ${group.name}.`);
+      groups.reload();
+    } catch (err) {
+      setError(errorText(err));
+    }
+  }
+
+  return (
+    <Screen title="Electives" subtitle={canChoose ? "Tap a subject to choose it" : "Subjects chosen"} refreshing={groups.loading} onRefresh={groups.reload}>
+      {header}
+      <Message text={message} error={error} />
+      <Loader loading={groups.loading && !groups.data} error={groups.error} onRetry={groups.reload} empty={groups.data?.length === 0 ? "No electives offered yet." : null}>
+        {(groups.data ?? []).map((g) => (
+          <Card key={g.id}>
+            <Row style={{ justifyContent: "space-between" }}>
+              <H>{g.name}</H>
+              <Badge text={g.is_open ? "Open" : "Closed"} tone={g.is_open ? "green" : "slate"} />
+            </Row>
+            {g.options.map((o) => {
+              const mine = g.my_option_id === o.id;
+              const full = o.taken >= o.seats && !mine;
+              return (
+                <Pressable
+                  key={o.id}
+                  disabled={!canChoose || !g.is_open || full || mine}
+                  onPress={() => choose(g, o)}
+                  style={{
+                    marginTop: 10,
+                    padding: 12,
+                    borderRadius: 10,
+                    borderWidth: mine ? 2 : 1,
+                    borderColor: mine ? colors.brand : colors.border,
+                    backgroundColor: mine ? "#ecfdf5" : colors.white,
+                    opacity: full ? 0.5 : 1,
+                  }}
+                >
+                  <Row style={{ justifyContent: "space-between" }}>
+                    <Text style={{ fontWeight: "700", color: colors.text, flex: 1 }}>{o.subject_name}</Text>
+                    {mine ? <Badge text="Your choice" tone="green" /> : <Muted>{full ? "Full" : `${o.seats - o.taken} seats left`}</Muted>}
+                  </Row>
+                  <Muted>{o.teacher_name ?? ""}</Muted>
+                </Pressable>
+              );
+            })}
+            {!g.my_option_id && <Muted style={{ marginTop: 8 }}>Not chosen yet.</Muted>}
+          </Card>
+        ))}
+      </Loader>
+    </Screen>
+  );
+}
+
+function Stars({ value, onChange }) {
+  return (
+    <Row style={{ gap: 6, marginTop: 4 }}>
+      {[1, 2, 3, 4, 5].map((n) => (
+        <Pressable key={n} onPress={() => onChange(n)} hitSlop={6}>
+          <Text style={{ fontSize: 28, color: n <= value ? "#f59e0b" : "#cbd5e1" }}>{"★"}</Text>
+        </Pressable>
+      ))}
+    </Row>
+  );
+}
+
+/** Anonymous faculty feedback: one form per subject while a round is open. */
+export function FeedbackScreen({ childId }) {
+  const { token } = useAuth();
+  const rounds = useApi(childId ? `/me/parent/children/${childId}/feedback` : null);
+  const [open, setOpen] = useState(null);
+  const [ratings, setRatings] = useState([0, 0, 0, 0, 0]);
+  const [comment, setComment] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const [message, setMessage] = useState(null);
+
+  function start(roundId, subjectId) {
+    setOpen(`${roundId}|${subjectId}`);
+    setRatings([0, 0, 0, 0, 0]);
+    setComment("");
+    setError(null);
+  }
+
+  async function submit(roundId, subject) {
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`/me/parent/children/${childId}/feedback/${roundId}`, { method: "POST", token, body: { subject_id: subject.subject_id, ratings, comment } });
+      setMessage(`Thanks! Feedback for ${subject.subject_name} sent.`);
+      setOpen(null);
+      rounds.reload();
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Screen title="Faculty feedback" subtitle="Anonymous: your name is never stored with your answers" refreshing={rounds.loading} onRefresh={rounds.reload}>
+      <Message text={message} />
+      <Loader loading={rounds.loading && !rounds.data} error={rounds.error} onRetry={rounds.reload} empty={rounds.data?.length === 0 ? "No feedback is open right now." : null}>
+        {(rounds.data ?? []).map((r) => (
+          <View key={r.id}>
+            <H>{r.title}</H>
+            {r.subjects.map((s) => {
+              const key = `${r.id}|${s.subject_id}`;
+              return (
+                <Card key={key} onPress={s.done || open === key ? undefined : () => start(r.id, s.subject_id)}>
+                  <Row style={{ justifyContent: "space-between" }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontWeight: "700", color: colors.text }}>{s.subject_name}</Text>
+                      <Muted>{s.teacher_name}</Muted>
+                    </View>
+                    <Badge text={s.done ? "Done" : "Give feedback"} tone={s.done ? "green" : "amber"} />
+                  </Row>
+                  {open === key && (
+                    <View style={{ marginTop: 8 }}>
+                      {r.questions.map((q, i) => (
+                        <View key={q} style={{ marginTop: 8 }}>
+                          <Text style={{ color: colors.text }}>{q}</Text>
+                          <Stars value={ratings[i]} onChange={(n) => setRatings(ratings.map((v, j) => (j === i ? n : v)))} />
+                        </View>
+                      ))}
+                      <Input label="Comment (optional)" value={comment} onChangeText={setComment} multiline style={{ minHeight: 60, textAlignVertical: "top", marginTop: 8 }} />
+                      <Message error={error} />
+                      <Row style={{ marginTop: 8 }}>
+                        <Button title="Submit" onPress={() => submit(r.id, s)} loading={busy} disabled={ratings.includes(0)} style={{ flex: 1 }} />
+                        <Button title="Cancel" kind="secondary" onPress={() => setOpen(null)} style={{ flex: 1 }} />
+                      </Row>
+                    </View>
+                  )}
+                </Card>
+              );
+            })}
+          </View>
+        ))}
+      </Loader>
+    </Screen>
+  );
+}

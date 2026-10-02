@@ -35,6 +35,7 @@ import ReportsPage from "./pages/ReportsPage";
 import SchoolSitePage from "./pages/SchoolSitePage";
 import StaffAttendancePage from "./pages/StaffAttendancePage";
 import StudentsPage from "./pages/StudentsPage";
+import SubjectAttendancePage from "./pages/SubjectAttendancePage";
 import SuperAdminBackupsPage from "./pages/SuperAdminBackupsPage";
 import SuperAdminOverviewPage from "./pages/SuperAdminOverviewPage";
 import SuperAdminSchoolsPage from "./pages/SuperAdminSchoolsPage";
@@ -59,6 +60,7 @@ const NAV_ITEMS = [
   { id: "certificates", label: "ID cards & certificates", roles: ["admin"], module: "certificates" },
   { id: "students", label: "Students", roles: ["admin", "teacher"] },
   { id: "attendance", label: "Student Attendance", roles: ["admin", "teacher"] },
+  { id: "subject-attendance", label: "Subject Attendance", roles: ["admin", "teacher"] },
   { id: "staff-attendance", label: "Faculty Attendance", roles: ["admin"] },
   { id: "my-classes", label: "My Batches", roles: ["teacher"] },
   { id: "remarks", label: "Remarks", roles: ["admin"] },
@@ -146,6 +148,7 @@ function AuthenticatedApp() {
     if (activeNav === "dashboard") return <DashboardPage onNavigate={setActiveNav} />;
     if (activeNav === "attendance") return <AttendancePage />;
     if (activeNav === "staff-attendance") return <StaffAttendancePage />;
+    if (activeNav === "subject-attendance") return <SubjectAttendancePage />;
     if (activeNav === "departments") return <DepartmentsPage />;
     if (activeNav === "teachers") return <TeachersPage />;
     if (activeNav === "classes") return <ClassesPage />;

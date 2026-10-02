@@ -6,7 +6,7 @@ import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { AuthProvider, useApi, useAuth } from "./src/auth";
 import { AttendanceScreen, FacultyAssignmentsScreen, MarksScreen, PunchScreen } from "./src/screens/FacultyScreens";
 import { ChangePasswordScreen, LoginScreen } from "./src/screens/LoginScreen";
-import { DepartmentScreen, LeaveInboxScreen, PayslipsScreen, RemarksScreen } from "./src/screens/StaffExtraScreens";
+import { DepartmentScreen, LeaveInboxScreen, PayslipsScreen, RemarksScreen, SubjectAttendanceScreen } from "./src/screens/StaffExtraScreens";
 import {
   AssignmentsScreen,
   ChildPicker,
@@ -36,6 +36,7 @@ const PORTAL_TABS = [
   { id: "more", label: "More", icon: "☰" },
 ];
 const MORE_ITEMS = [
+  { id: "subject-attendance", label: "Subject attendance", roles: ["teacher"] },
   { id: "leave-inbox", label: "Leave requests to approve", roles: ["teacher"] },
   { id: "remarks", label: "Student remarks", roles: ["teacher"] },
   { id: "timetable", label: "Timetable", module: "timetable", roles: ["student", "parent", "teacher"] },
@@ -136,6 +137,7 @@ function FacultyApp() {
         ({
           department: <DepartmentScreen onOpenLeaves={() => openMore("leave-inbox")} />,
           "leave-inbox": <LeaveInboxScreen />,
+          "subject-attendance": <SubjectAttendanceScreen />,
           remarks: <RemarksScreen />,
           payslips: <PayslipsScreen />,
           punch: <PunchScreen />,

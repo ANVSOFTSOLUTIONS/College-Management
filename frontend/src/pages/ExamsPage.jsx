@@ -5,6 +5,7 @@ import {
   createExam,
   deleteExam,
   fetchClassResults,
+  fetchClassBacklogs,
   fetchExams,
   fetchMarkSheet,
   fetchMyPapers,
@@ -338,7 +339,7 @@ function ResultsTab({ token, exams, classes }) {
 
 // --- Exams (admin) ------------------------------------------------------------
 
-function NewExamForm({ token, classes, onCreated, onCancel }) {
+function NewExamForm({ token, classes, exams, onCreated, onCancel }) {
   const [form, setForm] = useState({
     name: "",
     term_label: "",
@@ -348,7 +349,10 @@ function NewExamForm({ token, classes, onCreated, onCancel }) {
     end_date: "",
     max_marks: "100",
     pass_marks: "40",
+    internal_exam_ids: [],
+    internal_weight: "",
   });
+  const internalExams = exams.filter((e) => e.exam_type === "internal");
   const [classIds, setClassIds] = useState([]);
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -362,7 +366,17 @@ function NewExamForm({ token, classes, onCreated, onCancel }) {
     setSaving(true);
     setError(null);
     try {
-      onCreated(await createExam(token, { ...form, start_date: form.start_date || null, end_date: form.end_date || null, class_ids: classIds }));
+      const withInternals = form.exam_type === "semester" && form.internal_exam_ids.length > 0;
+      onCreated(
+        await createExam(token, {
+          ...form,
+          start_date: form.start_date || null,
+          end_date: form.end_date || null,
+          class_ids: classIds,
+          internal_exam_ids: withInternals ? form.internal_exam_ids : [],
+          internal_weight: withInternals ? Number(form.internal_weight || 0) : 0,
+        }),
+      );
     } catch (err) {
       setError(errorMessage(err, "Couldn't create the exam."));
       setSaving(false);
@@ -390,6 +404,7 @@ function NewExamForm({ token, classes, onCreated, onCancel }) {
           <select id="exam-type" value={form.exam_type} onChange={(e) => setForm({ ...form, exam_type: e.target.value })} className={INPUT}>
             <option value="semester">Semester-end (counts for CGPA)</option>
             <option value="internal">Internal / mid exam</option>
+            <option value="supplementary">Supplementary (backlogs only)</option>
           </select>
         </div>
         {field("term_label", "Semester / term", { maxLength: 50, placeholder: "e.g. Sem 3" })}
@@ -399,6 +414,51 @@ function NewExamForm({ token, classes, onCreated, onCancel }) {
         {field("max_marks", "Max marks per subject", { required: true, type: "number", min: "1", step: "0.5" })}
         {field("pass_marks", "Pass marks", { required: true, type: "number", min: "0", step: "0.5" })}
       </div>
+      {form.exam_type === "semester" && internalExams.length > 0 && (
+        <fieldset className="rounded-lg border border-slate-200 p-3">
+          <legend className="px-1 text-sm font-medium text-slate-700">Internal marks (optional)</legend>
+          <p className="text-xs text-slate-500">Add the average of these internal exams to the semester-end marks, e.g. internal 30 + semester 70 = 100.</p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            {internalExams.map((e) => {
+              const on = form.internal_exam_ids.includes(e.id);
+              return (
+                <label key={e.id} className={`flex cursor-pointer items-center rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset ${on ? "bg-sky-600 text-white ring-sky-600" : "text-slate-600 ring-slate-300"}`}>
+                  <input
+                    type="checkbox"
+                    className="sr-only"
+                    checked={on}
+                    onChange={() =>
+                      setForm({ ...form, internal_exam_ids: on ? form.internal_exam_ids.filter((x) => x !== e.id) : [...form.internal_exam_ids, e.id] })
+                    }
+                  />
+                  {e.name}
+                </label>
+              );
+            })}
+            {form.internal_exam_ids.length > 0 && (
+              <label className="ml-2 flex items-center gap-2 text-sm text-slate-700">
+                Internal carries
+                <input
+                  type="number"
+                  min="1"
+                  max="60"
+                  required
+                  value={form.internal_weight}
+                  onChange={(e) => setForm({ ...form, internal_weight: e.target.value })}
+                  className="w-20 rounded-lg border border-slate-300 px-2 py-1"
+                  placeholder="30"
+                />
+                of 100 marks
+              </label>
+            )}
+          </div>
+        </fieldset>
+      )}
+      {form.exam_type === "supplementary" && (
+        <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          Only students with a backlog in a subject appear on its mark sheet. A pass replaces the failed grade in their CGPA.
+        </p>
+      )}
       <fieldset>
         <legend className="text-sm font-medium text-slate-700">Batches</legend>
         <div className="mt-2 flex flex-wrap gap-2">
@@ -453,7 +513,10 @@ function ExamCard({ token, exam, onChanged }) {
         <button type="button" onClick={() => setOpen(!open)} className="text-left">
           <p className="font-semibold text-slate-800">
             {exam.name}
-            <span className="ml-2 rounded-full bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-700">{exam.exam_type === "internal" ? "Internal" : "Semester-end"}</span>
+            <span className="ml-2 rounded-full bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-700">
+              {{ internal: "Internal", supplementary: "Supplementary" }[exam.exam_type] ?? "Semester-end"}
+              {exam.internal_weight > 0 && ` · internal ${exam.internal_weight} + external ${100 - exam.internal_weight}`}
+            </span>
             <span className={`ml-2 rounded-full px-2 py-0.5 text-xs font-semibold ${exam.published ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>
               {exam.published ? "Published" : "Draft"}
             </span>
@@ -555,6 +618,7 @@ function ExamsTab({ token, exams, classes, reload }) {
         <NewExamForm
           token={token}
           classes={classes}
+          exams={exams}
           onCreated={async () => {
             setCreating(false);
             await reload();
@@ -570,6 +634,74 @@ function ExamsTab({ token, exams, classes, reload }) {
             <ExamCard key={exam.id} token={token} exam={exam} onChanged={reload} />
           ))}
         </ul>
+      )}
+    </div>
+  );
+}
+
+function BacklogsTab({ token, classes }) {
+  const [classId, setClassId] = useState(classes[0]?.id ?? "");
+  const [rows, setRows] = useState(null);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (!classId) return;
+    setRows(null);
+    setError(null);
+    fetchClassBacklogs(token, classId)
+      .then(setRows)
+      .catch((err) => setError(errorMessage(err, "Couldn't load backlogs.")));
+  }, [token, classId]);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <select aria-label="Batch" value={classId} onChange={(e) => setClassId(e.target.value)} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm">
+          {classes.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name} - {c.section}
+            </option>
+          ))}
+        </select>
+        <p className="text-sm text-slate-500">Subjects whose latest semester-end or supplementary result is F or AB (published results only).</p>
+      </div>
+      {error && <p className="text-sm font-medium text-rose-600">{error}</p>}
+      {!rows && !error && <Loading />}
+      {rows && rows.length === 0 && (
+        <p className="rounded-xl border border-dashed border-slate-300 bg-white px-6 py-10 text-center text-sm text-slate-500">No backlogs in this batch. 🎉</p>
+      )}
+      {rows && rows.length > 0 && (
+        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+          <table className="min-w-full divide-y divide-slate-100 text-left text-sm">
+            <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <tr>
+                <th className="px-4 py-3">Student</th>
+                <th className="px-4 py-3">Backlog subjects</th>
+                <th className="px-4 py-3 text-right">Count</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {rows.map((r) => (
+                <tr key={r.student_id}>
+                  <td className="px-4 py-3">
+                    <p className="font-semibold text-slate-800">{r.full_name}</p>
+                    <p className="text-xs text-slate-400">{r.admission_number}</p>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap gap-1.5">
+                      {r.backlogs.map((b) => (
+                        <span key={b.subject_name} className="rounded-full bg-rose-50 px-2.5 py-0.5 text-xs font-semibold text-rose-700" title={b.exam_name}>
+                          {b.subject_name} ({b.grade})
+                        </span>
+                      ))}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-right font-bold text-rose-700">{r.backlogs.length}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );
@@ -607,6 +739,7 @@ function ExamsPage() {
     ...(isAdmin ? [{ id: "exams", label: "Exams" }] : []),
     { id: "marks", label: "Enter marks" },
     ...(isAdmin || resultClasses.length ? [{ id: "results", label: isAdmin ? "Results" : "Class results" }] : []),
+    ...(isAdmin || resultClasses.length ? [{ id: "backlogs", label: "Backlogs" }] : []),
   ];
 
   return (
@@ -629,6 +762,7 @@ function ExamsPage() {
       {state === "ready" && tab === "exams" && <ExamsTab token={token} exams={exams} classes={resultClasses} reload={load} />}
       {state === "ready" && tab === "marks" && <EnterMarksTab token={token} />}
       {state === "ready" && tab === "results" && <ResultsTab token={token} exams={exams} classes={resultClasses} />}
+      {state === "ready" && tab === "backlogs" && <BacklogsTab token={token} classes={resultClasses} />}
     </div>
   );
 }

@@ -16,6 +16,7 @@ function outcome(result) {
 // On-screen report card (student and parent portals).
 export function ReportCardView({ card, onPrint }) {
   const { result } = card;
+  const combined = result.papers.some((p) => p.combined !== null && p.combined !== undefined);
   return (
     <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
@@ -38,7 +39,9 @@ export function ReportCardView({ card, onPrint }) {
             <tr>
               <th className="py-1 pr-4">Subject</th>
               <th className="py-1 pr-4">Credits</th>
-              <th className="py-1 pr-4">Marks</th>
+              {combined && <th className="py-1 pr-4">Internal</th>}
+              {combined && <th className="py-1 pr-4">External</th>}
+              <th className="py-1 pr-4">{combined ? "Total /100" : "Marks"}</th>
               <th className="py-1 pr-4">Grade</th>
               <th className="py-1">Points</th>
             </tr>
@@ -48,7 +51,11 @@ export function ReportCardView({ card, onPrint }) {
               <tr key={paper.subject_name}>
                 <td className="py-1.5 pr-4 text-slate-800">{paper.subject_name}</td>
                 <td className="py-1.5 pr-4 text-slate-600">{paper.credits}</td>
-                <td className={`py-1.5 pr-4 ${paper.passed === false ? "font-semibold text-rose-700" : "text-slate-700"}`}>{score(paper)}</td>
+                {combined && <td className="py-1.5 pr-4 text-slate-600">{paper.internal ?? "—"}</td>}
+                {combined && <td className="py-1.5 pr-4 text-slate-600">{paper.external ?? "—"}</td>}
+                <td className={`py-1.5 pr-4 ${paper.passed === false ? "font-semibold text-rose-700" : "text-slate-700"}`}>
+                  {combined && paper.combined !== null ? paper.combined : score(paper)}
+                </td>
                 <td className="py-1.5 pr-4 font-semibold text-slate-700">{paper.grade ?? "—"}</td>
                 <td className="py-1.5 text-slate-600">{paper.grade_point ?? "—"}</td>
               </tr>
@@ -91,10 +98,12 @@ export function ReportCardView({ card, onPrint }) {
 
 function reportCardHtml(card) {
   const { result } = card;
+  const combined = result.papers.some((p) => p.combined !== null && p.combined !== undefined);
   const rows = result.papers
-    .map(
-      (p) =>
-        `<tr><td>${escapeHtml(p.subject_name)}</td><td>${p.credits}</td><td>${p.max_marks}</td><td>${escapeHtml(p.is_absent ? "AB" : p.marks ?? "—")}</td><td>${escapeHtml(p.grade ?? "—")}</td><td>${p.grade_point ?? "—"}</td></tr>`,
+    .map((p) =>
+      combined
+        ? `<tr><td>${escapeHtml(p.subject_name)}</td><td>${p.credits}</td><td>${p.internal ?? "—"}</td><td>${escapeHtml(p.is_absent ? "AB" : p.external ?? "—")}</td><td>${p.combined ?? "—"}</td><td>${escapeHtml(p.grade ?? "—")}</td><td>${p.grade_point ?? "—"}</td></tr>`
+        : `<tr><td>${escapeHtml(p.subject_name)}</td><td>${p.credits}</td><td>${p.max_marks}</td><td>${escapeHtml(p.is_absent ? "AB" : p.marks ?? "—")}</td><td>${escapeHtml(p.grade ?? "—")}</td><td>${p.grade_point ?? "—"}</td></tr>`,
     )
     .join("");
   return `<!doctype html><html><head><meta charset="utf-8"><title>Report card - ${escapeHtml(result.full_name)}</title>
@@ -108,13 +117,13 @@ function reportCardHtml(card) {
   @media print { body { margin: 0; } .box { border: 0; } }
 </style></head><body><div class="box">
   <h1>${escapeHtml(card.school_name)}</h1>
-  <h2>${card.exam_type === "internal" ? "Marks memo" : "Grade sheet"} · ${escapeHtml(card.exam_name)}</h2>
+  <h2>${card.exam_type === "internal" ? "Marks memo" : card.exam_type === "supplementary" ? "Supplementary grade sheet" : "Grade sheet"} · ${escapeHtml(card.exam_name)}</h2>
   <div class="meta">
     <div><span>Student:</span> ${escapeHtml(result.full_name)}</div><div><span>Roll no.:</span> ${escapeHtml(result.admission_number)}</div>
     <div><span>Batch:</span> ${escapeHtml(card.class_name)} - ${escapeHtml(card.section)}</div><div><span>Year:</span> ${escapeHtml([card.term_label, card.academic_year].filter(Boolean).join(" · "))}</div>
     ${card.department_name ? `<div><span>Department:</span> ${escapeHtml(card.department_name)}</div>` : ""}${card.semester ? `<div><span>Semester:</span> ${card.semester}${card.program ? ` (${escapeHtml(card.program)})` : ""}</div>` : ""}
   </div>
-  <table><thead><tr><th>Subject</th><th>Credits</th><th>Max</th><th>Marks</th><th>Grade</th><th>Points</th></tr></thead><tbody>${rows}</tbody></table>
+  <table><thead><tr>${combined ? "<th>Subject</th><th>Credits</th><th>Internal</th><th>External</th><th>Total /100</th><th>Grade</th><th>Points</th>" : "<th>Subject</th><th>Credits</th><th>Max</th><th>Marks</th><th>Grade</th><th>Points</th>"}</tr></thead><tbody>${rows}</tbody></table>
   <p class="summary"><b>Total:</b> ${result.total} / ${result.max_total}${result.percentage !== null ? ` &nbsp; <b>Percentage:</b> ${result.percentage}%` : ""}${result.sgpa !== null && result.sgpa !== undefined ? ` &nbsp; <b>SGPA:</b> ${result.sgpa}` : ""}${card.cgpa !== null && card.cgpa !== undefined ? ` &nbsp; <b>CGPA:</b> ${card.cgpa}` : ""} &nbsp; <b>Credits earned:</b> ${result.credits_earned} / ${result.credits_total}${result.rank ? ` &nbsp; <b>Rank:</b> ${result.rank} of ${card.class_size}` : ""}</p>
   <p style="font-size:12px;color:#64748b">Grades: O (10) ≥ 90% · A+ (9) ≥ 80 · A (8) ≥ 70 · B+ (7) ≥ 60 · B (6) ≥ 50 · C (5) ≥ 40 · F (0) below pass mark · AB absent</p>
   <p class="summary"><b>Result:</b> ${escapeHtml(outcome(result))}</p>

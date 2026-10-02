@@ -5,7 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-ExamType = Literal["internal", "semester"]
+ExamType = Literal["internal", "semester", "supplementary"]
 
 
 def _strip(value):
@@ -22,6 +22,9 @@ class CreateExamRequest(BaseModel):
     name: str = Field(min_length=1, max_length=150)
     term_label: str = Field(default="", max_length=50)
     exam_type: ExamType = "semester"
+    # Semester-end exams only: internal exams whose marks make up `internal_weight` of the 100.
+    internal_exam_ids: list[str] = Field(default_factory=list, max_length=10)
+    internal_weight: int = Field(default=0, ge=0, le=60)
     academic_year: str = Field(min_length=4, max_length=9)
     start_date: date | None = None
     end_date: date | None = None
@@ -47,6 +50,8 @@ class UpdateExamRequest(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=150)
     term_label: str | None = Field(default=None, max_length=50)
     exam_type: ExamType | None = None
+    internal_exam_ids: list[str] | None = Field(default=None, max_length=10)
+    internal_weight: int | None = Field(default=None, ge=0, le=60)
     start_date: date | None = None
     end_date: date | None = None
 
@@ -100,6 +105,8 @@ class ExamOut(BaseModel):
     published: bool
     papers: list[PaperOut]
     exam_type: ExamType = "semester"
+    internal_exam_ids: list[str] = []
+    internal_weight: int = 0
 
 
 class MarkEntryIn(BaseModel):
@@ -143,6 +150,9 @@ class PaperResult(BaseModel):
     passed: bool | None
     credits: float = 0
     grade_point: int | None = None
+    internal: float | None = None  # internal marks, out of the exam's internal weight
+    external: float | None = None  # semester-end marks scaled to the rest of the 100
+    combined: float | None = None  # internal + external, out of 100
 
 
 class StudentResult(BaseModel):
@@ -197,6 +207,19 @@ class ReportCard(BaseModel):
     program: str = ""
     semester: int | None = None
     cgpa: float | None = None
+
+
+class BacklogOut(BaseModel):
+    subject_name: str
+    exam_name: str
+    grade: str | None
+
+
+class StudentBacklogs(BaseModel):
+    student_id: str
+    full_name: str
+    admission_number: str
+    backlogs: list[BacklogOut]
 
 
 class PublishedResult(BaseModel):

@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, Response, status
 from app.api.deps import CurrentUser, require_roles
 from app.modules.exams import service
 from app.modules.exams.schemas import (
+    BacklogOut,
     ClassResults,
     CreateExamRequest,
     ExamOut,
@@ -12,6 +13,7 @@ from app.modules.exams.schemas import (
     PublishedResult,
     ReportCard,
     SaveMarksRequest,
+    StudentBacklogs,
     UpdateExamRequest,
     UpdatePaperRequest,
 )
@@ -37,6 +39,12 @@ async def list_exams(current_user: CurrentUser = Depends(_staff)) -> list[ExamOu
 async def create_exam(payload: CreateExamRequest, current_user: CurrentUser = Depends(_admin_only)) -> ExamOut:
     """Creates the exam with a paper for every subject taught in each chosen class."""
     return await service.create_exam(current_user, payload)
+
+
+@router.get("/backlogs", response_model=list[StudentBacklogs])
+async def class_backlogs(class_id: str, current_user: CurrentUser = Depends(_staff)) -> list[StudentBacklogs]:
+    """Students of the batch with uncleared backlogs (failed or absent in their latest attempt)."""
+    return await service.class_backlogs(current_user, class_id)
 
 
 @router.get("/{exam_id}", response_model=ExamOut)
@@ -113,6 +121,12 @@ async def save_marks(paper_id: str, payload: SaveMarksRequest, current_user: Cur
 
 
 # --- Published results for parents ---------------------------------------------
+
+
+@parent_results_router.get("/{student_id}/backlogs", response_model=list[BacklogOut])
+async def child_backlogs(student_id: str, current_user: CurrentUser = Depends(require_roles("parent", "student"))) -> list[BacklogOut]:
+    child = await parents.child_row(current_user, student_id)
+    return await service.backlogs(child["id"])
 
 
 @parent_results_router.get("/{student_id}/results", response_model=list[PublishedResult])

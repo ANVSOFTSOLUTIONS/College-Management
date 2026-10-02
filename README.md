@@ -37,6 +37,9 @@ first sign-in.
   **SGPA** per exam (credit-weighted), **CGPA** over published semester-end exams; internal / mid exams don't count towards CGPA.
   Grade sheets show credits, grade points, SGPA, CGPA and credits earned.
 - **Student logins** (college code + roll number) with the same portal parents have, limited to their own record
+- **Internal + external marks:** a semester-end exam can include internal exams (e.g. mid exams 30 + semester 70 = 100); grade sheets show internal, external and total
+- **Backlogs & supplementary exams:** failed / absent subjects are tracked per student and per batch; a supplementary exam lists only students with that backlog, and a pass replaces the F in CGPA
+- **Subject-wise attendance:** marked per subject and period by the subject's faculty (web and app); percentages per subject with the 75% rule flagged for students, parents and faculty
 - **Faculty** designations (Professor, Assistant Professor …); student email, mobile and admission quota (Convener, Management …)
 - **Library:** catalogue with copies, issue / renew / return to students and faculty, loan limit, overdue list and per-day fines
 - **Hostel:** hostels (boys / girls), rooms with beds, allocate / move / vacate students; students and parents see the room, roommates and warden

@@ -20,7 +20,9 @@ export function HomeScreen({ childId, header }) {
   const library = useApi(childId ? `/me/parent/children/${childId}/library` : null);
   const hostel = useApi(childId ? `/me/parent/children/${childId}/hostel` : null);
   const transport = useApi(childId ? `/me/parent/children/${childId}/transport` : null);
-  const reloadAll = () => [overview, library, hostel, transport].forEach((q) => q.reload());
+  const subjects = useApi(childId ? `/me/parent/children/${childId}/subject-attendance` : null);
+  const backlogs = useApi(childId ? `/me/parent/children/${childId}/backlogs` : null);
+  const reloadAll = () => [overview, library, hostel, transport, subjects, backlogs].forEach((q) => q.reload());
   const o = overview.data;
   const pct = o && o.attendance_days ? Math.round(((o.present + o.late) * 100) / o.attendance_days) : null;
   const openLoans = (library.data ?? []).filter((l) => !l.returned_on || (l.fine > 0 && !l.fine_paid));
@@ -44,6 +46,37 @@ export function HomeScreen({ childId, header }) {
             </Row>
             {pct !== null && pct < 75 && (
               <Message error="Attendance is below 75%. Most universities need 75% to write the semester exams." />
+            )}
+            {(subjects.data ?? []).length > 0 && (
+              <Card>
+                <H>Subject-wise attendance</H>
+                {subjects.data.map((s) => (
+                  <View key={s.subject_id} style={{ marginTop: 10 }}>
+                    <Row style={{ justifyContent: "space-between" }}>
+                      <Text style={{ color: colors.text, fontWeight: "600", flex: 1 }}>{s.subject_name}</Text>
+                      <Text style={{ fontWeight: "800", color: s.short ? colors.danger : colors.brandDark }}>{s.percent}%</Text>
+                    </Row>
+                    <View style={{ height: 6, backgroundColor: "#f1f5f9", borderRadius: 3, marginTop: 4 }}>
+                      <View style={{ height: 6, borderRadius: 3, width: `${Math.min(s.percent ?? 0, 100)}%`, backgroundColor: s.short ? colors.danger : colors.brand }} />
+                    </View>
+                    <Muted>
+                      {s.attended}/{s.held} classes
+                    </Muted>
+                  </View>
+                ))}
+              </Card>
+            )}
+            {(backlogs.data ?? []).length > 0 && (
+              <Card style={{ borderColor: "#fecdd3", backgroundColor: colors.dangerSoft }}>
+                <H>Backlogs ({backlogs.data.length})</H>
+                {backlogs.data.map((b) => (
+                  <Row key={b.subject_name} style={{ justifyContent: "space-between", marginTop: 6 }}>
+                    <Text style={{ color: colors.text, flex: 1 }}>{b.subject_name}</Text>
+                    <Badge text={b.grade ?? "F"} tone="red" />
+                  </Row>
+                ))}
+                <Muted style={{ marginTop: 6 }}>Clear them in the next supplementary exam.</Muted>
+              </Card>
             )}
             {o.recent_attendance.length > 0 && (
               <Card>
@@ -160,14 +193,21 @@ export function ResultsScreen({ childId, header }) {
                 <H>{card.exam_name}</H>
                 <Muted>{[card.term_label, card.academic_year, card.semester && `Sem ${card.semester}`].filter(Boolean).join(" · ")}</Muted>
               </View>
-              <Badge text={card.exam_type === "internal" ? "Internal" : "Semester"} tone="blue" />
+              <Badge text={{ internal: "Internal", supplementary: "Supplementary" }[card.exam_type] ?? "Semester"} tone="blue" />
             </Row>
             {card.result.papers.map((p) => (
               <Row key={p.subject_name} style={{ justifyContent: "space-between", marginTop: 8 }}>
                 <View style={{ flex: 1 }}>
                   <Text style={{ color: colors.text, fontWeight: "600" }}>{p.subject_name}</Text>
                   <Muted>
-                    {p.credits} credits · {p.is_absent ? "Absent" : p.marks === null ? "—" : `${p.marks}/${p.max_marks}`}
+                    {p.credits} credits ·{" "}
+                    {p.combined !== null && p.combined !== undefined
+                      ? `internal ${p.internal} + external ${p.is_absent ? "AB" : p.external} = ${p.combined}/100`
+                      : p.is_absent
+                        ? "Absent"
+                        : p.marks === null
+                          ? "—"
+                          : `${p.marks}/${p.max_marks}`}
                   </Muted>
                 </View>
                 <Badge text={p.grade ?? "—"} tone={p.passed === false ? "red" : "green"} />

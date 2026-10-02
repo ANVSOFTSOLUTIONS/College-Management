@@ -3,7 +3,7 @@ import { Pressable, Text, View } from "react-native";
 
 import { api, errorText } from "../api";
 import { useApi, useAuth } from "../auth";
-import { Badge, Button, Card, Chips, colors, H, Input, Loader, Message, Muted, Row, rupees, Screen, Stat } from "../ui";
+import { Badge, Button, Card, Chips, colors, H, Input, Loader, Message, Muted, Row, rupees, Screen, Stat, today } from "../ui";
 
 // Faculty extras (leave approvals, payslips, remarks) and the HOD's department view.
 
@@ -281,6 +281,101 @@ export function DepartmentScreen({ onOpenLeaves }) {
             })}
           </>
         )}
+      </Loader>
+    </Screen>
+  );
+}
+
+const NEXT_STATUS = { present: "absent", absent: "late", late: "present" };
+const STATUS_COLOR = { present: colors.brand, absent: colors.danger, late: "#f59e0b" };
+
+/** Attendance for one subject and period (the 75% rule is checked per subject). */
+export function SubjectAttendanceScreen() {
+  const { token } = useAuth();
+  const subjects = useApi("/subject-attendance/my-subjects");
+  const [pick, setPick] = useState(null);
+  const [day, setDay] = useState(today());
+  const [period, setPeriod] = useState(1);
+  const [marks, setMarks] = useState({});
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState(null);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (!pick && subjects.data?.length) setPick(`${subjects.data[0].class_id}|${subjects.data[0].subject_id}`);
+  }, [subjects.data, pick]);
+
+  const [classId, subjectId] = (pick ?? "|").split("|");
+  const sheet = useApi(pick ? "/subject-attendance/sheet" : null, { class_id: classId, subject_id: subjectId, day, period });
+
+  useEffect(() => {
+    if (sheet.data) setMarks(Object.fromEntries(sheet.data.rows.map((r) => [r.student_id, r.status ?? "present"])));
+  }, [sheet.data]);
+
+  async function save() {
+    setBusy(true);
+    setMessage(null);
+    setError(null);
+    try {
+      await api("/subject-attendance", {
+        method: "POST",
+        token,
+        body: { class_id: classId, subject_id: subjectId, date: day, period, records: sheet.data.rows.map((r) => ({ student_id: r.student_id, status: marks[r.student_id] })) },
+      });
+      setMessage(`Saved ${sheet.data.subject_name}, period ${period}.`);
+      sheet.reload();
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const rows = sheet.data?.rows ?? [];
+  const counts = Object.values(marks).reduce((c, st) => ({ ...c, [st]: (c[st] ?? 0) + 1 }), {});
+  return (
+    <Screen title="Subject attendance" subtitle="Tap a student: present → absent → late" refreshing={sheet.loading} onRefresh={sheet.reload}>
+      <Loader loading={subjects.loading} error={subjects.error} onRetry={subjects.reload} empty={subjects.data?.length === 0 ? "You don't teach any subject yet." : null}>
+        <Chips
+          options={(subjects.data ?? []).map((x) => ({ value: `${x.class_id}|${x.subject_id}`, label: `${x.subject_name} · ${x.class_name}-${x.section}` }))}
+          value={pick}
+          onChange={setPick}
+        />
+        <Row>
+          <View style={{ flex: 1 }}>
+            <Input label="Date (YYYY-MM-DD)" value={day} onChangeText={setDay} />
+          </View>
+        </Row>
+        <Chips options={[1, 2, 3, 4, 5, 6, 7, 8].map((n) => ({ value: n, label: `P${n}` }))} value={period} onChange={setPeriod} />
+        <Row>
+          <Stat label="Present" value={counts.present ?? 0} tone="green" />
+          <Stat label="Absent" value={counts.absent ?? 0} tone="red" />
+          <Stat label="Late" value={counts.late ?? 0} />
+        </Row>
+        <Loader loading={sheet.loading && !sheet.data} error={sheet.error} onRetry={sheet.reload}>
+          <Card style={{ padding: 0 }}>
+            {rows.map((r, i) => {
+              const st = marks[r.student_id] ?? "present";
+              return (
+                <Pressable
+                  key={r.student_id}
+                  onPress={() => setMarks({ ...marks, [r.student_id]: NEXT_STATUS[st] })}
+                  style={{ flexDirection: "row", alignItems: "center", padding: 12, borderTopWidth: i ? 1 : 0, borderTopColor: colors.border }}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontWeight: "600", color: colors.text }}>{r.full_name}</Text>
+                    <Muted>{r.admission_number}</Muted>
+                  </View>
+                  <View style={{ backgroundColor: STATUS_COLOR[st], borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6, minWidth: 76, alignItems: "center" }}>
+                    <Text style={{ color: colors.white, fontWeight: "700", textTransform: "capitalize" }}>{st}</Text>
+                  </View>
+                </Pressable>
+              );
+            })}
+          </Card>
+          <Message text={message} error={error} />
+          {rows.length > 0 && <Button title={sheet.data?.marked ? "Update attendance" : "Save attendance"} onPress={save} loading={busy} />}
+        </Loader>
       </Loader>
     </Screen>
   );

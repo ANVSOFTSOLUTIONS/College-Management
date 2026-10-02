@@ -1,5 +1,6 @@
 """College structure: departments, batches with semesters, credits, SGPA / CGPA, and student logins."""
 
+from app.db.helpers import execute
 from app.modules.alerts.service import today_ist
 from tests.factories import auth_headers, create_school, create_user, login
 
@@ -56,8 +57,9 @@ async def test_departments_batches_and_subject_credits(db, client):
     assert (await client.delete(f"{API}/departments/{cse['id']}", headers=admin)).status_code == 409
 
 
-async def test_sgpa_and_cgpa(db, client):
-    admin, hod = await _college(client, "COL2")
+async def _graded_batch(client, code):
+    """A batch with Maths (4 credits) and Physics Lab (2 credits), faculty and one student."""
+    admin, hod = await _college(client, code)
     batch = (await client.post(f"{API}/classes", json={"name": "B.Sc", "section": "A", "academic_year": "2026", "class_teacher_id": hod["id"],
                                                         "semester": 1}, headers=admin)).json()
     maths = (await client.post(f"{API}/subjects", json={"name": "Maths", "credits": 4}, headers=admin)).json()
@@ -65,33 +67,97 @@ async def test_sgpa_and_cgpa(db, client):
     for subject in (maths, lab):
         await client.put(f"{API}/classes/{batch['id']}/subjects/{subject['id']}", json={"teacher_id": hod["id"]}, headers=admin)
     student = (await client.post(f"{API}/students", json={"admission_number": "21A01", "full_name": "Asha", "class_id": batch["id"]}, headers=admin)).json()
+    published = [0]
 
-    async def exam(name, exam_type, maths_marks, lab_marks):
-        created = (await client.post(f"{API}/exams", json={"name": name, "exam_type": exam_type, "academic_year": "2026", "class_ids": [batch["id"]],
-                                                            "max_marks": "100", "pass_marks": "40"}, headers=admin)).json()
-        assert created["exam_type"] == exam_type
-        papers = {p["subject_name"]: p for p in created["papers"]}
-        for subject, marks in (("Maths", maths_marks), ("Physics Lab", lab_marks)):
-            entry = {"student_id": student["id"], "marks": marks} if marks is not None else {"student_id": student["id"], "is_absent": True}
-            await client.put(f"{API}/exam-papers/{papers[subject]['id']}/marks", json={"entries": [entry]}, headers=admin)
+    async def exam(name, exam_type, marks, **extra):
+        """Creates and publishes an exam; marks maps subject name to marks out of 100 (None = absent, missing = not written)."""
+        body = {"name": name, "exam_type": exam_type, "academic_year": "2026", "class_ids": [batch["id"]], "max_marks": "100", "pass_marks": "40", **extra}
+        created = await client.post(f"{API}/exams", json=body, headers=admin)
+        assert created.status_code == 201, created.text
+        created = created.json()
+        for paper in created["papers"]:
+            if paper["subject_name"] not in marks:
+                continue
+            value = marks[paper["subject_name"]]
+            entry = {"student_id": student["id"], "marks": str(value)} if value is not None else {"student_id": student["id"], "is_absent": True}
+            saved = await client.put(f"{API}/exam-papers/{paper['id']}/marks", json={"entries": [entry]}, headers=admin)
+            assert saved.status_code == 200, saved.text
         await client.post(f"{API}/exams/{created['id']}/publish", headers=admin)
+        # Publish times a minute apart, so "latest attempt" is well defined.
+        published[0] += 1
+        await execute("UPDATE exams SET published_at = TIMESTAMPADD(MINUTE, %s, '2026-06-01 10:00:00') WHERE id = %s", (published[0], created["id"]))
         return created
 
-    # Semester 1: Maths 92 (O, 10) x 4 credits, Lab 75 (A, 8) x 2 -> SGPA (40 + 16) / 6 = 9.33.
-    sem1 = await exam("Sem 1", "semester", "92", "75")
-    card = (await client.get(f"{API}/exams/{sem1['id']}/students/{student['id']}/report-card", headers=admin)).json()
-    papers = {p["subject_name"]: p for p in card["result"]["papers"]}
-    assert (papers["Maths"]["grade"], papers["Maths"]["grade_point"], papers["Physics Lab"]["grade"]) == ("O", 10, "A")
-    assert (card["result"]["sgpa"], card["result"]["credits_earned"], card["cgpa"]) == (9.33, 6.0, 9.33)
+    async def card(exam_id):
+        return (await client.get(f"{API}/exams/{exam_id}/students/{student['id']}/report-card", headers=admin)).json()
 
-    # A mid exam doesn't count towards CGPA.
-    await exam("Mid 2", "internal", "20", "30")
-    # Semester 2: Maths 35 is below the pass mark (F, 0), Lab absent (AB, 0) -> SGPA 0, CGPA 56 / 12 = 4.67.
-    sem2 = await exam("Sem 2", "semester", "35", None)
-    card = (await client.get(f"{API}/exams/{sem2['id']}/students/{student['id']}/report-card", headers=admin)).json()
-    grades = [p["grade"] for p in card["result"]["papers"]]
-    assert grades == ["F", "AB"]
-    assert (card["result"]["sgpa"], card["result"]["credits_earned"], card["result"]["passed"], card["cgpa"]) == (0.0, 0.0, False, 4.67)
+    return admin, batch, student, exam, card
+
+
+async def test_sgpa_and_cgpa(db, client):
+    admin, batch, student, exam, card = await _graded_batch(client, "COL2")
+
+    # Maths 92 (O, 10) x 4 credits, Lab 75 (A, 8) x 2 -> SGPA (40 + 16) / 6 = 9.33.
+    sem1 = await exam("Sem 1", "semester", {"Maths": 92, "Physics Lab": 75})
+    result = await card(sem1["id"])
+    papers = {p["subject_name"]: p for p in result["result"]["papers"]}
+    assert (papers["Maths"]["grade"], papers["Maths"]["grade_point"], papers["Physics Lab"]["grade"]) == ("O", 10, "A")
+    assert (result["result"]["sgpa"], result["result"]["credits_earned"], result["cgpa"]) == (9.33, 6.0, 9.33)
+
+    # An internal exam doesn't count towards CGPA.
+    await exam("Mid 2", "internal", {"Maths": 20, "Physics Lab": 30})
+    assert (await card(sem1["id"]))["cgpa"] == 9.33
+
+
+async def test_backlog_cleared_by_supplementary(db, client):
+    admin, batch, student, exam, card = await _graded_batch(client, "COL7")
+    sem1 = await exam("Sem 1", "semester", {"Maths": 35, "Physics Lab": 75})
+    result = await card(sem1["id"])
+    # Maths below the pass mark: F, no credits. SGPA (0 x 4 + 8 x 2) / 6 = 2.67.
+    assert ([p["grade"] for p in result["result"]["papers"]], result["result"]["sgpa"], result["cgpa"]) == (["F", "A"], 2.67, 2.67)
+
+    backlogs = (await client.get(f"{API}/exams/backlogs", params={"class_id": batch["id"]}, headers=admin)).json()
+    assert [(b["full_name"], [x["subject_name"] for x in b["backlogs"]]) for b in backlogs] == [("Asha", ["Maths"])]
+
+    # The supplementary mark sheet lists only students with a backlog in the subject.
+    supp = (await client.post(f"{API}/exams", json={"name": "Sem 1 Supplementary", "exam_type": "supplementary", "academic_year": "2026",
+                                                     "class_ids": [batch["id"]], "max_marks": "100", "pass_marks": "40"}, headers=admin)).json()
+    maths_paper = next(p for p in supp["papers"] if p["subject_name"] == "Maths")
+    lab_paper = next(p for p in supp["papers"] if p["subject_name"] == "Physics Lab")
+    assert [r["full_name"] for r in (await client.get(f"{API}/exam-papers/{maths_paper['id']}/marks", headers=admin)).json()["rows"]] == ["Asha"]
+    assert (await client.get(f"{API}/exam-papers/{lab_paper['id']}/marks", headers=admin)).json()["rows"] == []
+    await client.delete(f"{API}/exams/{supp['id']}", headers=admin)
+
+    # Passing the supplementary replaces the F: Maths 70 (A, 8) -> CGPA (8 x 4 + 8 x 2) / 6 = 8.0.
+    supp = await exam("Sem 1 Supplementary", "supplementary", {"Maths": 70})
+    result = await card(supp["id"])
+    assert ([p["subject_name"] for p in result["result"]["papers"]], result["cgpa"]) == (["Maths"], 8.0)
+    assert (await client.get(f"{API}/exams/backlogs", params={"class_id": batch["id"]}, headers=admin)).json() == []
+
+
+async def test_internal_and_external_marks_combined(db, client):
+    admin, batch, student, exam, card = await _graded_batch(client, "COL8")
+    mid1 = await exam("Mid 1", "internal", {"Maths": 80, "Physics Lab": 100})
+    mid2 = await exam("Mid 2", "internal", {"Maths": 60, "Physics Lab": None})  # absent in the lab mid
+    bad = await client.post(f"{API}/exams", json={"name": "X", "exam_type": "internal", "academic_year": "2026", "class_ids": [batch["id"]],
+                                                   "internal_exam_ids": [mid1["id"]], "internal_weight": 30}, headers=admin)
+    assert bad.json()["error"]["code"] == "internals_only_for_semester"
+
+    # Internal 30 + external 70. Maths: internal avg 70% -> 21; semester 50/100 -> 35; total 56 (B).
+    # Lab: internal avg 50% -> 15; semester 30/100 -> 21 -> below the semester pass mark: F.
+    sem = await exam("Sem 1", "semester", {"Maths": 50, "Physics Lab": 30}, internal_exam_ids=[mid1["id"], mid2["id"]], internal_weight=30)
+    assert (sem["internal_exam_ids"], sem["internal_weight"]) == ([mid1["id"], mid2["id"]], 30)
+    papers = {p["subject_name"]: p for p in (await card(sem["id"]))["result"]["papers"]}
+    assert (papers["Maths"]["internal"], papers["Maths"]["external"], papers["Maths"]["combined"], papers["Maths"]["grade"]) == (21.0, 35.0, 56.0, "B")
+    assert (papers["Physics Lab"]["combined"], papers["Physics Lab"]["grade"]) == (36.0, "F")
+
+    backlogs = (await client.get(f"{API}/me/parent/children/{student['id']}/backlogs", headers=await _login_student(client, admin, student, "COL8"))).json()
+    assert [(b["subject_name"], b["grade"]) for b in backlogs] == [("Physics Lab", "F")]
+
+
+async def _login_student(client, admin, student, code):
+    await client.post(f"{API}/students/{student['id']}/login", json={"password": "StudentPass1"}, headers=admin)
+    return auth_headers((await _student_login(client, code, student["admission_number"], "StudentPass1")).json()["access_token"])
 
 
 async def test_student_login_and_portal(db, client):
@@ -257,3 +323,42 @@ async def test_college_website_details_and_live_placements(db, client):
     placements = (await client.get(f"{API}/public/schools/WEB1/site")).json()["placements"]
     assert (placements["recruiters"], placements["students_placed"], placements["highest_package"]) == (["Infosys"], 1, 4.5)
     assert (await client.put(f"{API}/school-site/customize", json={"hidden_sections": ["placements", "programs"]}, headers=admin)).status_code == 200
+
+
+async def test_subject_wise_attendance(db, client):
+    admin, hod = await _college(client, "COL9")
+    anil = (await client.post(f"{API}/teachers", json={"email": "col9-a@example.com", "full_name": "Anil", "password": PASSWORD}, headers=admin)).json()
+    ravi = (await client.post(f"{API}/teachers", json={"email": "col9-r@example.com", "full_name": "Ravi", "password": PASSWORD}, headers=admin)).json()
+    batch = (await client.post(f"{API}/classes", json={"name": "B.Tech CSE", "section": "A", "academic_year": "2026", "class_teacher_id": hod["id"]}, headers=admin)).json()
+    ds = (await client.post(f"{API}/subjects", json={"name": "Data Structures"}, headers=admin)).json()
+    dbms = (await client.post(f"{API}/subjects", json={"name": "DBMS"}, headers=admin)).json()
+    await client.put(f"{API}/classes/{batch['id']}/subjects/{ds['id']}", json={"teacher_id": anil["id"]}, headers=admin)
+    await client.put(f"{API}/classes/{batch['id']}/subjects/{dbms['id']}", json={"teacher_id": ravi["id"]}, headers=admin)
+    asha = (await client.post(f"{API}/students", json={"admission_number": "S1", "full_name": "Asha", "class_id": batch["id"]}, headers=admin)).json()
+    bala = (await client.post(f"{API}/students", json={"admission_number": "S2", "full_name": "Bala", "class_id": batch["id"]}, headers=admin)).json()
+    anil_h = auth_headers((await login(client, "col9-a@example.com", PASSWORD)).json()["access_token"])
+
+    mine = (await client.get(f"{API}/subject-attendance/my-subjects", headers=anil_h)).json()
+    assert [(m["class_name"], m["subject_name"]) for m in mine] == [("B.Tech CSE", "Data Structures")]
+    # Anil can't mark Ravi's subject.
+    body = {"class_id": batch["id"], "subject_id": dbms["id"], "date": "2026-09-01", "records": [{"student_id": asha["id"], "status": "present"}]}
+    assert (await client.post(f"{API}/subject-attendance", json=body, headers=anil_h)).status_code == 403
+
+    # Four Data Structures hours: Asha attends all (one late), Bala attends two.
+    for i, (a, b) in enumerate([("present", "present"), ("late", "absent"), ("present", "absent"), ("present", "present")]):
+        body = {"class_id": batch["id"], "subject_id": ds["id"], "date": "2026-09-01", "period": i + 1,
+                "records": [{"student_id": asha["id"], "status": a}, {"student_id": bala["id"], "status": b}]}
+        saved = await client.post(f"{API}/subject-attendance", json=body, headers=anil_h)
+        assert saved.status_code == 200 and saved.json()["marked"], saved.text
+    sheet = (await client.get(f"{API}/subject-attendance/sheet", params={"class_id": batch["id"], "subject_id": ds["id"], "day": "2026-09-01", "period": 2},
+                              headers=anil_h)).json()
+    assert [(r["full_name"], r["status"]) for r in sheet["rows"]] == [("Asha", "late"), ("Bala", "absent")]
+
+    summary = {s["full_name"]: s["subjects"] for s in (await client.get(f"{API}/subject-attendance/summary", params={"class_id": batch["id"]}, headers=admin)).json()}
+    assert [(x["subject_name"], x["percent"], x["short"]) for x in summary["Asha"]] == [("Data Structures", 100.0, False)]
+    assert [(x["held"], x["attended"], x["percent"], x["short"]) for x in summary["Bala"]] == [(4, 2, 50.0, True)]
+
+    await client.post(f"{API}/students/{bala['id']}/login", json={"password": "BalaPass12"}, headers=admin)
+    bala_h = auth_headers((await _student_login(client, "COL9", "S2", "BalaPass12")).json()["access_token"])
+    mine = (await client.get(f"{API}/me/parent/children/{bala['id']}/subject-attendance", headers=bala_h)).json()
+    assert [(x["subject_name"], x["percent"], x["short"]) for x in mine] == [("Data Structures", 50.0, True)]

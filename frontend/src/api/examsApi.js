@@ -47,3 +47,7 @@ export function fetchReportCard(token, examId, studentId) {
 export function fetchChildResults(token, studentId) {
   return apiRequest(`/me/parent/children/${studentId}/results`, { token });
 }
+
+export function fetchClassBacklogs(token, classId) {
+  return apiRequest("/exams/backlogs", { token, params: { class_id: classId } });
+}

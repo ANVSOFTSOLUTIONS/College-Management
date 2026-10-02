@@ -17,6 +17,12 @@ from app.main import app
 _TABLES_CHILD_TO_PARENT = [
     "audit_log",
     "subject_attendance",
+    "semester_promotions",
+    "feedback_responses",
+    "feedback_rounds",
+    "elective_choices",
+    "elective_options",
+    "elective_groups",
     "placement_applications",
     "placement_drives",
     "placement_companies",

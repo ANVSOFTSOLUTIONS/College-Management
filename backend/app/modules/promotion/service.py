@@ -246,3 +246,174 @@ async def run(user: CurrentUser, payload: RunPromotionRequest) -> PromotionResul
             raise
         await conn.commit()
     return PromotionResult(**counts)
+
+
+# --- Semester promotion ---------------------------------------------------------
+# Colleges move a batch to its next semester in place. Students who break the
+# college's rules (too many backlogs or low attendance) can be detained: moved
+# to a junior batch of the same semester.
+
+
+class SemesterStudent(BaseModel):
+    id: str
+    full_name: str
+    admission_number: str
+    backlogs: int
+    attendance: float | None
+    eligible: bool
+    reasons: list[str]
+
+
+class DetainTarget(BaseModel):
+    class_id: str
+    label: str
+
+
+class SemesterPlan(BaseModel):
+    class_id: str
+    name: str
+    section: str
+    semester: int | None
+    already_promoted: bool
+    students: list[SemesterStudent]
+    detain_targets: list[DetainTarget]
+
+
+class SemesterPromotionRequest(BaseModel):
+    class_id: str
+    action: Literal["promote", "graduate"] = "promote"
+    detain: list[str] = []
+    detain_to_class_id: str | None = None
+
+
+class SemesterPromotionResult(BaseModel):
+    promoted: int
+    graduated: int
+    detained: int
+    to_semester: int | None
+    subjects_added: int
+
+
+async def _batch(user: CurrentUser, class_id: str) -> dict:
+    row = await fetch_one("SELECT * FROM classes WHERE id = %s AND school_id = %s AND is_archived = 0", (class_id, user.school_id))
+    if row is None:
+        raise AppError(status.HTTP_404_NOT_FOUND, "class_not_found", "Batch not found.")
+    return row
+
+
+async def semester_plan(user: CurrentUser, class_id: str, max_backlogs: int | None, min_attendance: float | None) -> SemesterPlan:
+    from app.modules.exams.service import backlogs
+
+    batch = await _batch(user, class_id)
+    students = await fetch_all(
+        "SELECT id, full_name, admission_number FROM students WHERE class_id = %s AND status = 'active' ORDER BY admission_number", (class_id,)
+    )
+    attendance = {
+        r["student_id"]: (round(int(r["attended"]) * 100 / r["held"], 1) if r["held"] else None)
+        for r in await fetch_all(
+            """
+            SELECT student_id, COUNT(*) AS held, SUM(status IN ('present', 'late')) AS attended
+            FROM subject_attendance WHERE class_id = %s GROUP BY student_id
+            """,
+            (class_id,),
+        )
+    }
+    result = []
+    for s in students:
+        count = len(await backlogs(s["id"]))
+        percent = attendance.get(s["id"])
+        reasons = []
+        if max_backlogs is not None and count > max_backlogs:
+            reasons.append(f"{count} backlogs (allowed {max_backlogs})")
+        if min_attendance is not None and percent is not None and percent < min_attendance:
+            reasons.append(f"attendance {percent}% (needs {min_attendance:g}%)")
+        result.append(SemesterStudent(**s, backlogs=count, attendance=percent, eligible=not reasons, reasons=reasons))
+    targets = []
+    if batch["semester"] is not None:
+        rows = await fetch_all(
+            """
+            SELECT id, name, section, academic_year FROM classes
+            WHERE school_id = %s AND is_archived = 0 AND semester = %s AND id <> %s ORDER BY academic_year DESC, name, section
+            """,
+            (user.school_id, batch["semester"], class_id),
+        )
+        targets = [DetainTarget(class_id=r["id"], label=f"{r['name']} - {r['section']} ({r['academic_year']})") for r in rows]
+    done = await fetch_one("SELECT id FROM semester_promotions WHERE class_id = %s AND from_semester = %s", (class_id, batch["semester"] or 0))
+    return SemesterPlan(
+        class_id=class_id, name=batch["name"], section=batch["section"], semester=batch["semester"], already_promoted=bool(done),
+        students=result, detain_targets=targets,
+    )
+
+
+async def run_semester(user: CurrentUser, payload: SemesterPromotionRequest) -> SemesterPromotionResult:
+    batch = await _batch(user, payload.class_id)
+    semester = batch["semester"]
+    if semester is None:
+        raise AppError(status.HTTP_400_BAD_REQUEST, "no_semester", "Set the batch's current semester first (Classes, edit the batch).")
+    roster = {r["id"]: r for r in await fetch_all("SELECT id, user_id FROM students WHERE class_id = %s AND status = 'active'", (batch["id"],))}
+    detain = set(payload.detain)
+    if detain - set(roster):
+        raise AppError(status.HTTP_400_BAD_REQUEST, "unknown_student", "Some detained students aren't in this batch.")
+    if detain:
+        target = None
+        if payload.detain_to_class_id:
+            target = await fetch_one(
+                "SELECT id, semester FROM classes WHERE id = %s AND school_id = %s AND is_archived = 0", (payload.detain_to_class_id, user.school_id)
+            )
+        if target is None or target["id"] == batch["id"] or target["semester"] != semester:
+            raise AppError(status.HTTP_400_BAD_REQUEST, "detain_target", f"Choose another batch in semester {semester} for detained students.")
+    moving = [s for sid, s in roster.items() if sid not in detain]
+    to_semester = semester + 1 if payload.action == "promote" else None
+    summary = {"promoted": 0, "graduated": 0, "detained": len(detain), "to_semester": to_semester, "subjects_added": 0}
+
+    async with db.pool.acquire() as conn:
+        await conn.begin()
+        try:
+            async with conn.cursor() as cur:
+                if detain:
+                    await cur.executemany("UPDATE students SET class_id = %s WHERE id = %s", [(payload.detain_to_class_id, sid) for sid in detain])
+                if payload.action == "graduate":
+                    if moving:
+                        await cur.executemany("UPDATE students SET status = 'graduated' WHERE id = %s", [(s["id"],) for s in moving])
+                    logins = [(s["user_id"],) for s in moving if s["user_id"]]
+                    if logins:
+                        await cur.executemany("UPDATE users SET status = 'inactive' WHERE id = %s", logins)
+                    await cur.execute("UPDATE classes SET is_archived = 1 WHERE id = %s", (batch["id"],))
+                    summary["graduated"] = len(moving)
+                else:
+                    await cur.execute("UPDATE classes SET semester = %s WHERE id = %s", (to_semester, batch["id"]))
+                    # Swap last semester's subjects for the next semester's (same department), taught by the
+                    # class teacher until the admin assigns faculty. Electives and subjects without a semester stay.
+                    await cur.execute(
+                        """
+                        DELETE cs FROM class_subjects cs JOIN subjects s ON s.id = cs.subject_id
+                        WHERE cs.class_id = %s AND s.semester = %s
+                          AND NOT EXISTS (SELECT 1 FROM elective_options o JOIN elective_groups g ON g.id = o.group_id
+                                          WHERE g.class_id = cs.class_id AND o.subject_id = cs.subject_id)
+                        """,
+                        (batch["id"], semester),
+                    )
+                    if batch["department_id"]:
+                        summary["subjects_added"] = await cur.execute(
+                            """
+                            INSERT IGNORE INTO class_subjects (id, school_id, class_id, subject_id, teacher_id)
+                            SELECT UUID(), school_id, %s, id, %s FROM subjects WHERE school_id = %s AND department_id = %s AND semester = %s
+                            """,
+                            (batch["id"], batch["teacher_id"], user.school_id, batch["department_id"], to_semester),
+                        )
+                    summary["promoted"] = len(moving)
+                await cur.execute(
+                    """
+                    INSERT INTO semester_promotions (id, school_id, class_id, from_semester, to_semester, summary, run_by)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (str(uuid.uuid4()), user.school_id, batch["id"], semester, to_semester, json.dumps(summary), user.id),
+                )
+        except aiomysql.IntegrityError as exc:
+            await conn.rollback()
+            raise AppError(status.HTTP_409_CONFLICT, "already_promoted", f"This batch was already promoted from semester {semester}.") from exc
+        except Exception:
+            await conn.rollback()
+            raise
+        await conn.commit()
+    return SemesterPromotionResult(**summary)

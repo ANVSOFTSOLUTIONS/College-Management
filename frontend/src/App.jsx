@@ -32,6 +32,9 @@ import PlacementsPage, { MyPlacementsPage } from "./pages/PlacementsPage";
 import ElectivesPage from "./pages/ElectivesPage";
 import FeedbackPage from "./pages/FeedbackPage";
 import GrievancesPage from "./pages/GrievancesPage";
+import HallTicketsPage from "./pages/HallTicketsPage";
+import ScholarshipsPage from "./pages/ScholarshipsPage";
+import CertificateRequestsPage from "./pages/CertificateRequestsPage";
 import NaacPage from "./pages/NaacPage";
 import PromotionPage from "./pages/PromotionPage";
 import SemesterPromotionPage from "./pages/SemesterPromotionPage";
@@ -65,6 +68,8 @@ const NAV_ITEMS = [
   { id: "semester-promotion", label: "Promote to next semester", roles: ["admin"] },
   { id: "promotion", label: "New academic year", roles: ["admin"] },
   { id: "certificates", label: "ID cards & certificates", roles: ["admin"], module: "certificates" },
+  { id: "certificate-requests", label: "Certificate requests", roles: ["admin"], module: "certificates" },
+  { id: "scholarships", label: "Scholarships", roles: ["admin"] },
   { id: "students", label: "Students", roles: ["admin", "teacher"] },
   { id: "attendance", label: "Student Attendance", roles: ["admin", "teacher"] },
   { id: "subject-attendance", label: "Subject Attendance", roles: ["admin", "teacher"] },
@@ -73,6 +78,7 @@ const NAV_ITEMS = [
   { id: "remarks", label: "Remarks", roles: ["admin"] },
   { id: "parent-alerts", label: "Parent Alerts", roles: ["admin", "teacher"] },
   { id: "exams", label: "Exams & Marks", roles: ["admin", "teacher"], module: "exams" },
+  { id: "hall-tickets", label: "Hall tickets & seating", roles: ["admin"], module: "exams" },
   { id: "homework", label: "Assignments", roles: ["admin", "teacher", "parent", "student"], module: "homework" },
   { id: "notices", label: "Notice board", roles: ["admin", "teacher", "parent", "student"], module: "notices" },
   { id: "timetable", label: "Timetable", roles: ["admin", "teacher", "parent", "student"], module: "timetable" },
@@ -193,6 +199,9 @@ function AuthenticatedApp() {
     if (activeNav === "electives") return <ElectivesPage />;
     if (activeNav === "feedback") return <FeedbackPage />;
     if (activeNav === "grievances") return <GrievancesPage />;
+    if (activeNav === "hall-tickets") return <HallTicketsPage />;
+    if (activeNav === "scholarships") return <ScholarshipsPage />;
+    if (activeNav === "certificate-requests") return <CertificateRequestsPage />;
     if (activeNav === "naac") return <NaacPage />;
     if (activeNav === "my-children" || activeNav === "my-portal") return <ParentPortalPage />;
     if (activeNav === "school-site") return <SchoolSitePage />;

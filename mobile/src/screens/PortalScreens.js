@@ -728,3 +728,119 @@ export function GrievancesScreen({ childId }) {
     </Screen>
   );
 }
+
+/** Released hall tickets: room, seat and paper dates; shows the attendance shortfall when not eligible. */
+export function HallTicketScreen({ childId, header }) {
+  const tickets = useApi(childId ? `/me/parent/children/${childId}/hall-tickets` : null);
+  return (
+    <Screen title="Hall tickets" refreshing={tickets.loading} onRefresh={tickets.reload}>
+      {header}
+      <Loader loading={tickets.loading && !tickets.data} error={tickets.error} onRetry={tickets.reload} empty={tickets.data?.length === 0 ? "No hall tickets released yet." : null}>
+        {(tickets.data ?? []).map((t) => (
+          <Card key={t.exam_id} style={t.eligible ? { borderColor: colors.brand, borderWidth: 2 } : { backgroundColor: colors.dangerSoft }}>
+            <Muted>{t.college_name}</Muted>
+            <H>{t.exam_name}</H>
+            <Text style={{ color: colors.text, marginTop: 4 }}>
+              {t.full_name} · {t.admission_number} · {t.batch}
+            </Text>
+            {t.eligible ? (
+              <Row style={{ marginTop: 10 }}>
+                <Stat label="Room" value={t.room ?? "—"} tone="green" />
+                <Stat label="Seat" value={t.seat ?? "—"} tone="green" />
+              </Row>
+            ) : (
+              <Text style={{ color: colors.danger, fontWeight: "700", marginTop: 8 }}>
+                Not eligible: attendance {t.attendance ?? "—"}% (needs {t.min_attendance}%). Meet the college office.
+              </Text>
+            )}
+            {t.papers.map((p) => (
+              <Row key={p.subject_name} style={{ justifyContent: "space-between", marginTop: 6 }}>
+                <Text style={{ color: colors.text, flex: 1 }}>
+                  {p.subject_name} {p.subject_code ? `(${p.subject_code})` : ""}
+                </Text>
+                <Muted>{p.exam_date ?? "Date TBA"}</Muted>
+              </Row>
+            ))}
+            {t.eligible && <Muted style={{ marginTop: 8 }}>Show this screen with your college ID card at the exam hall.</Muted>}
+          </Card>
+        ))}
+      </Loader>
+    </Screen>
+  );
+}
+
+const SCHOLARSHIP_TONE = { applied: "slate", verified: "blue", sanctioned: "amber", disbursed: "green", rejected: "red" };
+const CERT_TONE = { pending: "amber", issued: "green", rejected: "red" };
+
+/** Scholarship status and certificate requests (bonafide / TC). */
+export function ScholarshipsCertificatesScreen({ childId, header }) {
+  const { token } = useAuth();
+  const scholarships = useApi(childId ? `/me/parent/children/${childId}/scholarships` : null);
+  const requests = useApi(childId ? `/me/parent/children/${childId}/certificate-requests` : null);
+  const [form, setForm] = useState({ kind: "bonafide", purpose: "" });
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState(null);
+  const [error, setError] = useState(null);
+
+  async function request() {
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      await api(`/me/parent/children/${childId}/certificate-requests`, { method: "POST", token, body: form });
+      setMessage("Request sent. You'll be notified when it's ready.");
+      setForm({ ...form, purpose: "" });
+      requests.reload();
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Screen title="Scholarships & certificates" refreshing={scholarships.loading} onRefresh={() => [scholarships, requests].forEach((q) => q.reload())}>
+      {header}
+      <H>Scholarships</H>
+      <Loader loading={scholarships.loading && !scholarships.data} error={scholarships.error} onRetry={scholarships.reload}>
+        {(scholarships.data ?? []).length === 0 && <Muted>No scholarship records yet.</Muted>}
+        {(scholarships.data ?? []).map((s) => (
+          <Card key={s.id}>
+            <Row style={{ justifyContent: "space-between" }}>
+              <Text style={{ fontWeight: "700", color: colors.text, flex: 1 }}>{s.scheme}</Text>
+              <Badge text={s.status} tone={SCHOLARSHIP_TONE[s.status]} />
+            </Row>
+            <Muted>
+              {s.academic_year}
+              {s.application_no ? ` · ${s.application_no}` : ""}
+            </Muted>
+            <Muted>
+              Sanctioned {rupees(s.amount_sanctioned)} · Received {rupees(s.amount_received)}
+            </Muted>
+            {s.remarks ? <Muted>{s.remarks}</Muted> : null}
+          </Card>
+        ))}
+      </Loader>
+      <View style={{ height: 12 }} />
+      <Card>
+        <H>Request a certificate</H>
+        <View style={{ height: 8 }} />
+        <Chips options={[{ value: "bonafide", label: "Bonafide" }, { value: "tc", label: "Transfer certificate" }]} value={form.kind} onChange={(v) => setForm({ ...form, kind: v })} />
+        <Input label={form.kind === "tc" ? "Reason for leaving" : "Purpose (e.g. bank loan, passport)"} value={form.purpose} onChangeText={(v) => setForm({ ...form, purpose: v })} />
+        <Message text={message} error={error} />
+        <Button title="Send request" onPress={request} loading={busy} disabled={form.purpose.trim().length < 3} />
+      </Card>
+      {(requests.data ?? []).map((r) => (
+        <Card key={r.id}>
+          <Row style={{ justifyContent: "space-between" }}>
+            <Text style={{ fontWeight: "700", color: colors.text, flex: 1 }}>{r.title}</Text>
+            <Badge text={r.status} tone={CERT_TONE[r.status]} />
+          </Row>
+          <Muted>{r.purpose}</Muted>
+          {r.status === "issued" && <Muted>{r.serial_no}: collect it from the college office.</Muted>}
+          {r.note ? <Muted>Office: {r.note}</Muted> : null}
+        </Card>
+      ))}
+    </Screen>
+  );
+}

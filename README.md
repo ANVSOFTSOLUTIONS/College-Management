@@ -45,6 +45,9 @@ first sign-in.
 - **Anonymous faculty feedback:** students rate each subject's faculty on five questions in the app; the admin sees all scores and comments, HODs their department, faculty their own after the round closes
 - **Grievances:** students, parents and faculty raise tickets in the app (ragging / harassment marked urgent and alerted at once); the office replies, resolves or closes on the web, and the raiser is notified
 - **NAAC / AISHE data:** students by programme, gender, social category and quota; faculty by designation; pass %, attendance, placements, feedback and grievance redressal, each tagged with its NAAC criterion, with an Excel download
+- **Hall tickets & seating:** minimum attendance rule with condonation / hold-back overrides, exam rooms with seats alternating batches, printable hall tickets and seating charts, and hall tickets in the student app
+- **Scholarships:** government schemes per student and year (applied → verified → sanctioned → disbursed) with amounts and scheme-wise totals; status visible in the app
+- **Certificate requests:** students and parents request bonafide / TC in the app; the office approves (issues with the next serial) or rejects with a note
 - **Faculty** designations (Professor, Assistant Professor …); student email, mobile and admission quota (Convener, Management …)
 - **Library:** catalogue with copies, issue / renew / return to students and faculty, loan limit, overdue list and per-day fines
 - **Hostel:** hostels (boys / girls), rooms with beds, allocate / move / vacate students; students and parents see the room, roommates and warden

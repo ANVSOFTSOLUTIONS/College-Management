@@ -16,6 +16,7 @@ from app.main import app
 # ON DELETE RESTRICT, so classes must go before teachers, etc.)
 _TABLES_CHILD_TO_PARENT = [
     "audit_log",
+    "subject_attendance",
     "placement_applications",
     "placement_drives",
     "placement_companies",

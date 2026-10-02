@@ -9,6 +9,7 @@ Rank uses standard competition ranking (1, 2, 2, 4) on percentage, among
 students whose every paper is entered.
 """
 
+import json
 import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -23,6 +24,7 @@ from app.db.helpers import execute, fetch_all, fetch_one
 from app.modules.alerts import service as alerts
 from app.modules.audit import service as audit
 from app.modules.exams.schemas import (
+    BacklogOut,
     ClassResults,
     CreateExamRequest,
     ExamOut,
@@ -34,6 +36,7 @@ from app.modules.exams.schemas import (
     PublishedResult,
     ReportCard,
     SaveMarksRequest,
+    StudentBacklogs,
     StudentResult,
     SubjectStats,
     UpdateExamRequest,
@@ -145,12 +148,39 @@ async def get_exam(user: CurrentUser, exam_id: str) -> ExamOut:
         name=exam["name"],
         term_label=exam["term_label"],
         exam_type=exam["exam_type"],
+        internal_exam_ids=_internal_ids(exam),
+        internal_weight=exam["internal_weight"],
         academic_year=exam["academic_year"],
         start_date=exam["start_date"],
         end_date=exam["end_date"],
         published=exam["published_at"] is not None,
         papers=[_paper_out(p, user, teacher_id) for p in papers],
     )
+
+
+def _internal_ids(exam: dict) -> list[str]:
+    try:
+        return json.loads(exam["internal_exam_ids"] or "[]")
+    except (TypeError, ValueError):
+        return []
+
+
+async def _check_internals(user: CurrentUser, exam_type: str, ids: list[str], weight: int, exam_id: str | None = None) -> str | None:
+    """Validates the internal exams a semester-end exam draws on; returns them as JSON (None when not used)."""
+    ids = list(dict.fromkeys(ids))
+    if not ids and not weight:
+        return None
+    if exam_type != "semester":
+        raise AppError(status.HTTP_400_BAD_REQUEST, "internals_only_for_semester", "Only a semester-end exam can include internal marks.")
+    if not ids or not weight:
+        raise AppError(status.HTTP_400_BAD_REQUEST, "internals_incomplete", "Choose the internal exams and the marks they carry.")
+    placeholders = ", ".join(["%s"] * len(ids))
+    found = await fetch_all(
+        f"SELECT id FROM exams WHERE school_id = %s AND exam_type = 'internal' AND id IN ({placeholders})", (user.school_id, *ids)
+    )
+    if len(found) != len(ids) or (exam_id and exam_id in ids):
+        raise AppError(status.HTTP_400_BAD_REQUEST, "invalid_internal_exam", "Choose internal exams of this college.")
+    return json.dumps(ids)
 
 
 async def list_exams(user: CurrentUser) -> list[ExamOut]:
@@ -170,6 +200,7 @@ async def create_exam(user: CurrentUser, payload: CreateExamRequest) -> ExamOut:
     subjects = await fetch_all(
         f"SELECT class_id, subject_id FROM class_subjects WHERE class_id IN ({placeholders})", tuple(class_ids)
     )
+    internals = await _check_internals(user, payload.exam_type, payload.internal_exam_ids, payload.internal_weight)
 
     exam_id = str(uuid.uuid4())
     async with db.pool.acquire() as conn:
@@ -177,11 +208,12 @@ async def create_exam(user: CurrentUser, payload: CreateExamRequest) -> ExamOut:
         async with conn.cursor() as cur:
             await cur.execute(
                 """
-                INSERT INTO exams (id, school_id, name, term_label, exam_type, academic_year, start_date, end_date)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                INSERT INTO exams (id, school_id, name, term_label, exam_type, internal_exam_ids, internal_weight, academic_year,
+                                   start_date, end_date)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
-                (exam_id, user.school_id, payload.name, payload.term_label, payload.exam_type, payload.academic_year,
-                 payload.start_date, payload.end_date),
+                (exam_id, user.school_id, payload.name, payload.term_label, payload.exam_type, internals,
+                 payload.internal_weight if internals else 0, payload.academic_year, payload.start_date, payload.end_date),
             )
             for row in subjects:
                 await cur.execute(
@@ -196,9 +228,15 @@ async def create_exam(user: CurrentUser, payload: CreateExamRequest) -> ExamOut:
 
 
 async def update_exam(user: CurrentUser, exam_id: str, payload: UpdateExamRequest) -> ExamOut:
-    await _get_exam(user, exam_id)
+    exam = await _get_exam(user, exam_id)
     updates = payload.model_dump(exclude_unset=True)
     updates = {k: v for k, v in updates.items() if v is not None or k in ("start_date", "end_date")}
+    if {"internal_exam_ids", "internal_weight", "exam_type"} & updates.keys():
+        exam_type = updates.get("exam_type", exam["exam_type"])
+        ids = updates.pop("internal_exam_ids", _internal_ids(exam))
+        weight = updates.pop("internal_weight", exam["internal_weight"])
+        internals = await _check_internals(user, exam_type, ids, weight, exam_id)
+        updates["internal_exam_ids"], updates["internal_weight"] = internals, weight if internals else 0
     if updates:
         sets = ", ".join(f"{k} = %s" for k in updates)
         await execute(f"UPDATE exams SET {sets} WHERE id = %s", (*updates.values(), exam_id))
@@ -293,6 +331,33 @@ async def delete_paper(user: CurrentUser, paper_id: str) -> None:
 # --- Marks entry --------------------------------------------------------------
 
 
+async def _roster(paper: dict) -> list[str]:
+    """Who writes this paper: the batch's active students; for a supplementary exam, students with a backlog in the subject."""
+    exam = await fetch_one("SELECT exam_type, published_at FROM exams WHERE id = %s", (paper["exam_id"],))
+    if exam["exam_type"] != "supplementary":
+        rows = await fetch_all("SELECT id FROM students WHERE class_id = %s AND status = 'active'", (paper["class_id"],))
+        return [r["id"] for r in rows]
+    rows = await fetch_all(
+        """
+        SELECT DISTINCT m.student_id AS id FROM exam_marks m
+        JOIN exam_subjects es ON es.id = m.exam_subject_id JOIN exams e ON e.id = es.exam_id
+        JOIN students s ON s.id = m.student_id
+        WHERE es.subject_id = %s AND e.school_id = %s AND s.status = 'active' AND e.id <> %s
+          AND e.published_at IS NOT NULL AND e.exam_type IN ('semester', 'supplementary')
+          AND (m.is_absent = 1 OR m.marks < es.pass_marks)
+          AND NOT EXISTS (
+              SELECT 1 FROM exam_marks m2 JOIN exam_subjects es2 ON es2.id = m2.exam_subject_id JOIN exams e2 ON e2.id = es2.exam_id
+              WHERE m2.student_id = m.student_id AND es2.subject_id = es.subject_id AND e2.published_at IS NOT NULL
+                AND e2.exam_type IN ('semester', 'supplementary') AND e2.published_at > e.published_at
+                AND m2.is_absent = 0 AND m2.marks >= es2.pass_marks
+          )
+        UNION SELECT student_id AS id FROM exam_marks WHERE exam_subject_id = %s
+        """,
+        (paper["subject_id"], paper["school_id"], paper["exam_id"], paper["id"]),
+    )
+    return [r["id"] for r in rows]
+
+
 async def my_papers(user: CurrentUser) -> list[PaperOut]:
     """Papers the user may enter marks for, in unpublished exams (most recent exams first)."""
     teacher_id = await _teacher_id(user)
@@ -308,14 +373,18 @@ async def mark_sheet(user: CurrentUser, paper_id: str) -> MarkSheet:
     teacher_id = await _teacher_id(user)
     if not _can_mark(user, teacher_id, paper):
         raise _not_found("paper")
-    rows = await fetch_all(
-        """
-        SELECT s.id, s.full_name, s.admission_number, m.marks, m.is_absent
-        FROM students s LEFT JOIN exam_marks m ON m.student_id = s.id AND m.exam_subject_id = %s
-        WHERE s.class_id = %s AND s.status = 'active' ORDER BY s.full_name
-        """,
-        (paper_id, paper["class_id"]),
-    )
+    student_ids = await _roster(paper)
+    rows = []
+    if student_ids:
+        placeholders = ", ".join(["%s"] * len(student_ids))
+        rows = await fetch_all(
+            f"""
+            SELECT s.id, s.full_name, s.admission_number, m.marks, m.is_absent
+            FROM students s LEFT JOIN exam_marks m ON m.student_id = s.id AND m.exam_subject_id = %s
+            WHERE s.id IN ({placeholders}) ORDER BY s.full_name
+            """,
+            (paper_id, *student_ids),
+        )
     return MarkSheet(
         paper=_paper_out(paper, user, teacher_id),
         rows=[
@@ -338,7 +407,7 @@ async def save_marks(user: CurrentUser, paper_id: str, payload: SaveMarksRequest
         raise _not_found("paper")
     if paper["published_at"]:
         raise _LOCKED
-    roster = {r["id"] for r in await fetch_all("SELECT id FROM students WHERE class_id = %s AND status = 'active'", (paper["class_id"],))}
+    roster = set(await _roster(paper))
     unknown = [e.student_id for e in payload.entries if e.student_id not in roster]
     if unknown:
         raise AppError(status.HTTP_400_BAD_REQUEST, "unknown_student", "Some students aren't in this class.")
@@ -442,7 +511,7 @@ async def _alert_exam_absence(paper: dict, student_id: str, author_id: str) -> N
 async def _class_results(exam: dict, class_row: dict) -> ClassResults:
     papers = await fetch_all(
         """
-        SELECT es.id, es.max_marks, es.pass_marks, sub.name AS subject_name, sub.credits FROM exam_subjects es
+        SELECT es.id, es.subject_id, es.max_marks, es.pass_marks, sub.name AS subject_name, sub.credits FROM exam_subjects es
         JOIN subjects sub ON sub.id = es.subject_id WHERE es.exam_id = %s AND es.class_id = %s ORDER BY sub.name
         """,
         (exam["id"], class_row["id"]),
@@ -468,11 +537,17 @@ async def _class_results(exam: dict, class_row: dict) -> ClassResults:
         ):
             marks[(m["exam_subject_id"], m["student_id"])] = m
 
+    supplementary = exam["exam_type"] == "supplementary"
+    weight = Decimal(exam["internal_weight"] or 0) if exam["exam_type"] == "semester" else Decimal(0)
+    internals = await _internal_percentages(_internal_ids(exam), class_row["id"]) if weight else {}
+
     results = []
     for student in students:
         paper_results, total, max_total, complete, passed = [], Decimal(0), Decimal(0), True, True
         for paper in papers:
             entry = marks.get((paper["id"], student["id"]))
+            if entry is None and supplementary:
+                continue  # only backlog subjects are written in a supplementary exam
             if entry is None:
                 complete, passed = False, False
                 paper_results.append(PaperResult(subject_name=paper["subject_name"], max_marks=_f(paper["max_marks"]),
@@ -481,15 +556,25 @@ async def _class_results(exam: dict, class_row: dict) -> ClassResults:
                 continue
             got = Decimal(entry["marks"] or 0)
             paper_passed = not entry["is_absent"] and got >= Decimal(paper["pass_marks"])
+            internal = external = combined = None
+            if weight:
+                # Internal marks (average of the internal exams) plus the semester-end paper, out of 100.
+                internal = Decimal(internals.get((paper["subject_id"], student["id"]), 0)) * weight / 100
+                external = got / Decimal(paper["max_marks"]) * (100 - weight)
+                combined = internal + external
+                paper_passed = paper_passed and combined >= 40
+                total += combined
+                max_total += 100
+            else:
+                total += got
+                max_total += Decimal(paper["max_marks"])
             passed = passed and paper_passed
-            total += got
-            max_total += Decimal(paper["max_marks"])
             if entry["is_absent"]:
                 grade = "AB"
             elif not paper_passed:
                 grade = "F"
             else:
-                grade = grade_for(float(got * 100 / Decimal(paper["max_marks"])))
+                grade = grade_for(float(combined if weight else got * 100 / Decimal(paper["max_marks"])))
             paper_results.append(
                 PaperResult(
                     subject_name=paper["subject_name"],
@@ -501,10 +586,15 @@ async def _class_results(exam: dict, class_row: dict) -> ClassResults:
                     passed=paper_passed,
                     credits=float(paper["credits"]),
                     grade_point=GRADE_POINTS[grade],
+                    internal=_f(internal) if internal is not None else None,
+                    external=_f(external) if external is not None else None,
+                    combined=_f(combined) if combined is not None else None,
                 )
             )
         percentage = round(float(total * 100 / max_total), 2) if max_total else None
-        is_complete = complete and bool(papers)
+        is_complete = complete and bool(paper_results if supplementary else papers)
+        if supplementary and not paper_results:
+            continue  # not writing anything in this supplementary exam
         results.append(
             StudentResult(
                 student_id=student["id"],
@@ -530,8 +620,8 @@ async def _class_results(exam: dict, class_row: dict) -> ClassResults:
         result.rank = previous.rank if previous and previous.percentage == result.percentage else position + 1
 
     stats = []
-    for index, paper in enumerate(papers):
-        values = [r.papers[index] for r in results if r.papers[index].marks is not None or r.papers[index].is_absent]
+    for paper in papers:
+        values = [p for r in results for p in r.papers if p.subject_name == paper["subject_name"] and (p.marks is not None or p.is_absent)]
         scored = [p.marks for p in values if p.marks is not None]
         stats.append(
             SubjectStats(
@@ -645,14 +735,65 @@ async def published_results(student_id: str) -> list[PublishedResult]:
         class_id = await _exam_class_for(student, exam["id"])
         class_row = await fetch_one("SELECT * FROM classes WHERE id = %s", (class_id,))
         results.append(PublishedResult(exam_id=exam["id"], report_card=await _report_card(exam, class_row, student_id)))
-    # CGPA on each semester-end card: cumulative over it and every earlier one (results are newest first).
-    papers: list[PaperResult] = []
+    # CGPA on each semester-end / supplementary card: cumulative over it and every earlier one,
+    # a subject counting once with its latest attempt (a supplementary pass replaces the F).
+    latest: dict[str, PaperResult] = {}
     for published in reversed(results):
         card = published.report_card
-        if card.exam_type == "semester" and card.result.complete:
-            papers.extend(card.result.papers)
-            card.cgpa = gpa(papers)
+        if card.exam_type == "semester" and card.result.complete or card.exam_type == "supplementary":
+            latest.update({p.subject_name: p for p in card.result.papers if p.grade is not None})
+            card.cgpa = gpa(list(latest.values()))
     return results
+
+
+async def backlogs(student_id: str) -> list[BacklogOut]:
+    """Subjects whose latest published semester-end or supplementary attempt is F or AB."""
+    latest: dict[str, tuple[PaperResult, str]] = {}
+    for published in reversed(await published_results(student_id)):
+        card = published.report_card
+        if card.exam_type in ("semester", "supplementary"):
+            for p in card.result.papers:
+                if p.grade is not None:
+                    latest[p.subject_name] = (p, card.exam_name)
+    return [
+        BacklogOut(subject_name=name, exam_name=exam_name, grade=p.grade)
+        for name, (p, exam_name) in sorted(latest.items())
+        if p.passed is False
+    ]
+
+
+async def class_backlogs(user: CurrentUser, class_id: str) -> list[StudentBacklogs]:
+    await _require_class_view(user, class_id)
+    students = await fetch_all(
+        "SELECT id, full_name, admission_number FROM students WHERE class_id = %s AND status = 'active' ORDER BY admission_number",
+        (class_id,),
+    )
+    result = []
+    for s in students:
+        items = await backlogs(s["id"])
+        if items:
+            result.append(StudentBacklogs(student_id=s["id"], full_name=s["full_name"], admission_number=s["admission_number"], backlogs=items))
+    return result
+
+
+async def _internal_percentages(exam_ids: list[str], class_id: str) -> dict[tuple[str, str], Decimal]:
+    """Average internal percentage per (subject, student) over the internal exams' papers for the batch."""
+    if not exam_ids:
+        return {}
+    placeholders = ", ".join(["%s"] * len(exam_ids))
+    rows = await fetch_all(
+        f"""
+        SELECT es.subject_id, m.student_id, m.marks, m.is_absent, es.max_marks
+        FROM exam_marks m JOIN exam_subjects es ON es.id = m.exam_subject_id
+        WHERE es.exam_id IN ({placeholders}) AND es.class_id = %s
+        """,
+        (*exam_ids, class_id),
+    )
+    sums: dict[tuple[str, str], list[Decimal]] = {}
+    for r in rows:
+        pct = Decimal(0) if r["is_absent"] else Decimal(r["marks"] or 0) * 100 / Decimal(r["max_marks"])
+        sums.setdefault((r["subject_id"], r["student_id"]), []).append(pct)
+    return {key: sum(values) / len(values) for key, values in sums.items()}
 
 
 async def cgpa(student_id: str) -> float | None:

@@ -439,3 +439,86 @@ export function FeedbackScoresScreen() {
     </Screen>
   );
 }
+
+/** Faculty: tick off syllabus topics as they're taught; add topics unit by unit. */
+export function LessonPlanScreen() {
+  const { token } = useAuth();
+  const subjects = useApi("/subject-attendance/my-subjects");
+  const [pick, setPick] = useState(null);
+  const [unit, setUnit] = useState("1");
+  const [title, setTitle] = useState("");
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (!pick && subjects.data?.length) setPick(`${subjects.data[0].class_id}|${subjects.data[0].subject_id}`);
+  }, [subjects.data, pick]);
+
+  const [classId, subjectId] = (pick ?? "|").split("|");
+  const plan = useApi(pick ? "/lesson-plans" : null, { class_id: classId, subject_id: subjectId });
+
+  async function act(path, options) {
+    setError(null);
+    try {
+      await api(path, { token, ...options });
+      plan.reload();
+    } catch (err) {
+      setError(errorText(err));
+    }
+  }
+
+  async function add() {
+    await act("/lesson-plans", { method: "POST", body: { class_id: classId, subject_id: subjectId, topics: [{ unit: Number(unit) || 1, title }] } });
+    setTitle("");
+  }
+
+  const p = plan.data;
+  return (
+    <Screen title="Lesson plan" subtitle="Tap a topic when it's taught" refreshing={plan.loading} onRefresh={plan.reload}>
+      <Loader loading={subjects.loading} error={subjects.error} onRetry={subjects.reload} empty={subjects.data?.length === 0 ? "You don't teach any subject yet." : null}>
+        <Chips
+          options={(subjects.data ?? []).map((x) => ({ value: `${x.class_id}|${x.subject_id}`, label: `${x.subject_name} · ${x.class_name}-${x.section}` }))}
+          value={pick}
+          onChange={setPick}
+        />
+        {p && (
+          <Card>
+            <Row style={{ justifyContent: "space-between" }}>
+              <H>{p.subject_name}</H>
+              <Text style={{ fontWeight: "800", color: colors.brandDark }}>
+                {p.done}/{p.total} · {p.percent ?? 0}%
+              </Text>
+            </Row>
+            {p.topics.map((t) => (
+              <Pressable
+                key={t.id}
+                onPress={() => act(`/lesson-plans/topics/${t.id}`, { method: "PUT", body: { completed: !t.completed_on } })}
+                style={{ flexDirection: "row", alignItems: "center", paddingVertical: 8, borderTopWidth: 1, borderTopColor: colors.border }}
+              >
+                <Text style={{ fontSize: 18, width: 28, color: t.completed_on ? colors.brand : colors.muted }}>{t.completed_on ? "☑" : "☐"}</Text>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ color: t.completed_on ? colors.muted : colors.text }}>
+                    Unit {t.unit}: {t.title}
+                  </Text>
+                  {t.overdue && <Text style={{ color: colors.danger, fontSize: 12 }}>Planned for {t.planned_date}</Text>}
+                </View>
+              </Pressable>
+            ))}
+          </Card>
+        )}
+        <Card>
+          <H>Add a topic</H>
+          <Row>
+            <View style={{ width: 70 }}>
+              <Input label="Unit" value={unit} onChangeText={setUnit} keyboardType="number-pad" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Input label="Topic" value={title} onChangeText={setTitle} />
+            </View>
+          </Row>
+          <Message error={error} />
+          <Button title="Add" onPress={add} disabled={!title.trim() || !pick} />
+        </Card>
+      </Loader>
+    </Screen>
+  );
+}

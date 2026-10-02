@@ -590,7 +590,7 @@ async def send_reminders(user: CurrentUser, *, class_id: str | None, only_overdu
                 "amount": f"{amount:.2f}",
                 "due_date": f"{summary.next_due_date:%d %b %Y}" if summary.next_due_date else "",
             }
-            text = f"Dear Parent, school fee of Rs.{amount:,.2f} for {ctx['full_name']} is {due}. Please pay at the school office. - {ctx['school_name']}"
+            text = f"Dear Parent, fee of Rs.{amount:,.2f} for {ctx['full_name']} is {due}. Please pay at the college office. - {ctx['school_name']}"
             return text, variables
 
         if await alerts.create_alert(

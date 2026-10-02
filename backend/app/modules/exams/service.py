@@ -258,12 +258,31 @@ async def delete_exam(user: CurrentUser, exam_id: str) -> None:
 async def set_published(user: CurrentUser, exam_id: str, published: bool) -> ExamOut:
     exam = await _get_exam(user, exam_id)
     await execute("UPDATE exams SET published_at = %s WHERE id = %s", (datetime.now(timezone.utc) if published else None, exam_id))
+    if published and not exam["published_at"]:
+        await _alert_results(user, exam)
     if bool(exam["published_at"]) != published:
         await audit.record(
             user, "marks.published" if published else "marks.unpublished",
             f"{'Published' if published else 'Unpublished'} results of {exam['name']}", entity_type="exam", entity_id=exam_id,
         )
     return await get_exam(user, exam_id)
+
+
+async def _alert_results(user: CurrentUser, exam: dict) -> None:
+    """Tells parents the results are out (once per exam and student), with the SGPA or percentage."""
+    exam = await _get_exam(user, exam["id"])
+    outcomes = {}
+    for class_row in await fetch_all(
+        "SELECT DISTINCT c.* FROM classes c JOIN exam_subjects es ON es.class_id = c.id WHERE es.exam_id = %s", (exam["id"],)
+    ):
+        for r in (await _class_results(exam, class_row)).students:
+            if not r.complete:
+                continue
+            score = f"SGPA {r.sgpa}" if r.sgpa is not None and exam["exam_type"] != "internal" else f"{r.percentage}%"
+            failed = sum(1 for p in r.papers if p.passed is False)
+            outcomes[r.student_id] = f"{score}, {'all passed' if not failed else f'{failed} subject(s) to clear'}"
+    if outcomes:
+        await alerts.alert_results(exam["id"], exam["name"], outcomes, user.id)
 
 
 async def add_paper(user: CurrentUser, exam_id: str, payload: PaperRequest) -> ExamOut:

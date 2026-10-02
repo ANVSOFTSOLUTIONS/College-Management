@@ -38,6 +38,15 @@ class Settings(BaseSettings):
     sms_msg91_template_absence: str = ""
     sms_msg91_template_remark: str = ""
     sms_msg91_template_fee: str = ""
+    sms_msg91_template_result: str = ""
+    # WhatsApp through MSG91, alongside SMS. Templates are the approved WhatsApp template names.
+    whatsapp_enabled: bool = False
+    whatsapp_msg91_number: str = ""  # the MSG91 integrated WhatsApp number, e.g. 919876543210
+    whatsapp_language: str = "en"
+    whatsapp_template_absence: str = ""
+    whatsapp_template_remark: str = ""
+    whatsapp_template_fee: str = ""
+    whatsapp_template_result: str = ""
 
     # Outgoing email (demo requests from the landing page). Off until SMTP_HOST is set.
     # Port 587 uses STARTTLS; set SMTP_USE_SSL=true for port 465.

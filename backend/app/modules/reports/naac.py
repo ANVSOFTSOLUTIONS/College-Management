@@ -239,6 +239,22 @@ async def _attendance(school_id: str) -> Table:
     )
 
 
+async def _alumni(school_id: str) -> Table:
+    rows = await fetch_all(
+        """
+        SELECT passing_year, COUNT(*) AS total, SUM(status = 'employed') AS employed, SUM(status = 'higher_studies') AS higher,
+               SUM(status = 'self_employed') AS self_employed
+        FROM alumni WHERE school_id = %s GROUP BY passing_year ORDER BY passing_year DESC
+        """,
+        (school_id,),
+    )
+    return Table(
+        key="alumni", title="Alumni progression", criterion="5.2.2 / 5.4",
+        headers=["Passing year", "Alumni", "Employed", "Higher studies", "Self-employed"],
+        rows=[[r["passing_year"], r["total"], int(r["employed"] or 0), int(r["higher"] or 0), int(r["self_employed"] or 0)] for r in rows],
+    )
+
+
 async def report(user: CurrentUser) -> NaacReport:
     school = await fetch_one("SELECT name FROM schools WHERE id = %s", (user.school_id,))
     student_tables, students = await _students(user.school_id)
@@ -260,7 +276,7 @@ async def report(user: CurrentUser) -> NaacReport:
         Metric(label="Average faculty feedback (out of 5)", value=feedback_avg),
         Metric(label="Grievances resolved", value=f"{resolved} of {received}"),
     ]
-    tables = [*student_tables, faculty_table, results_table, await _attendance(user.school_id), placement_table, feedback_table, grievance_table]
+    tables = [*student_tables, faculty_table, results_table, await _attendance(user.school_id), placement_table, await _alumni(user.school_id), feedback_table, grievance_table]
     return NaacReport(college_name=school["name"], generated_on=date.today(), metrics=metrics, tables=tables)
 
 

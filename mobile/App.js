@@ -6,15 +6,17 @@ import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { AuthProvider, useApi, useAuth } from "./src/auth";
 import { AttendanceScreen, FacultyAssignmentsScreen, MarksScreen, PunchScreen } from "./src/screens/FacultyScreens";
 import { ChangePasswordScreen, LoginScreen } from "./src/screens/LoginScreen";
-import { DepartmentScreen, FeedbackScoresScreen, LeaveInboxScreen, PayslipsScreen, RemarksScreen, SubjectAttendanceScreen } from "./src/screens/StaffExtraScreens";
+import { DepartmentScreen, FeedbackScoresScreen, LeaveInboxScreen, LessonPlanScreen, PayslipsScreen, RemarksScreen, SubjectAttendanceScreen } from "./src/screens/StaffExtraScreens";
 import {
   AssignmentsScreen,
   ChildPicker,
   ElectivesScreen,
   FeedbackScreen,
+  GatePassScreen,
   GrievancesScreen,
   HallTicketScreen,
   ScholarshipsCertificatesScreen,
+  SyllabusPapersScreen,
   HomeScreen,
   LeaveScreen,
   NoticesScreen,
@@ -42,11 +44,14 @@ const PORTAL_TABS = [
 ];
 const MORE_ITEMS = [
   { id: "subject-attendance", label: "Subject attendance", roles: ["teacher"] },
+  { id: "lesson-plan", label: "Lesson plan", roles: ["teacher"] },
   { id: "leave-inbox", label: "Leave requests to approve", roles: ["teacher"] },
   { id: "feedback-scores", label: "Feedback from students", roles: ["teacher"] },
   { id: "electives", label: "Electives", roles: ["student", "parent"] },
   { id: "feedback", label: "Faculty feedback", roles: ["student"] },
   { id: "hall-tickets", label: "Hall tickets", roles: ["student", "parent"] },
+  { id: "syllabus", label: "Syllabus & question papers", roles: ["student", "parent"] },
+  { id: "gate-pass", label: "Gate pass", roles: ["student", "parent"] },
   { id: "scholarships", label: "Scholarships & certificates", roles: ["student", "parent"] },
   { id: "grievances", label: "Grievances", roles: ["student", "parent", "teacher"] },
   { id: "remarks", label: "Student remarks", roles: ["teacher"] },
@@ -150,6 +155,7 @@ function FacultyApp() {
           "leave-inbox": <LeaveInboxScreen />,
           "subject-attendance": <SubjectAttendanceScreen />,
           "feedback-scores": <FeedbackScoresScreen />,
+          "lesson-plan": <LessonPlanScreen />,
           grievances: <GrievancesScreen />,
           remarks: <RemarksScreen />,
           payslips: <PayslipsScreen />,
@@ -200,6 +206,8 @@ function PortalApp() {
           grievances: <GrievancesScreen childId={childId} />,
           "hall-tickets": <HallTicketScreen childId={childId} header={header} />,
           scholarships: <ScholarshipsCertificatesScreen childId={childId} header={header} />,
+          syllabus: <SyllabusPapersScreen childId={childId} header={header} />,
+          "gate-pass": <GatePassScreen childId={childId} header={header} />,
           leave: <LeaveScreen childId={childId} header={header} />,
           password: <ChangePasswordScreen />,
         })[id]

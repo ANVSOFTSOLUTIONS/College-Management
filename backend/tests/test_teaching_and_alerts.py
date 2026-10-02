@@ -118,7 +118,7 @@ async def test_remark_with_parent_alert_is_recorded_while_sms_is_off(db, client)
     assert "Asha missed an exam (English)" in alert_list[0]["message"]
     assert alert_list[0]["status_detail"] == "SMS sending is turned off."
     settings = (await client.get(f"{API}/parent-alerts/settings", headers=ctx["admin"])).json()
-    assert settings == {"sms_enabled": False, "provider": ""}
+    assert settings == {"sms_enabled": False, "provider": "", "whatsapp_enabled": False}
 
 
 async def test_remark_subject_must_be_one_the_teacher_teaches(db, client):

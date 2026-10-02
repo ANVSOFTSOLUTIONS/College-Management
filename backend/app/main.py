@@ -44,7 +44,12 @@ from app.modules.school_site.storage import UPLOAD_ROOT
 from app.modules.staff_attendance.router import punch_router, router as staff_attendance_router, settings_router as school_settings_router
 from app.modules.students.router import router as students_router
 from app.modules.electives.router import portal_router as electives_portal_router, router as electives_router
+from app.modules.alumni.router import router as alumni_router
+from app.modules.gate.router import portal_router as gate_portal_router, router as gate_router
 from app.modules.grievances.router import router as grievances_router
+from app.modules.inventory.router import router as inventory_router
+from app.modules.lesson_plans.router import portal_router as lesson_plans_portal_router, router as lesson_plans_router
+from app.modules.question_bank.router import portal_router as question_bank_portal_router, router as question_bank_router
 from app.modules.hall_tickets.router import portal_router as hall_tickets_portal_router, router as hall_tickets_router
 from app.modules.scholarships.router import portal_router as scholarships_portal_router, router as scholarships_router
 from app.modules.feedback.router import portal_router as feedback_portal_router, router as feedback_router
@@ -92,6 +97,14 @@ app.include_router(electives_portal_router, prefix=settings.api_prefix)
 app.include_router(feedback_router, prefix=settings.api_prefix)
 app.include_router(feedback_portal_router, prefix=settings.api_prefix)
 app.include_router(grievances_router, prefix=settings.api_prefix)
+app.include_router(inventory_router, prefix=settings.api_prefix)
+app.include_router(gate_router, prefix=settings.api_prefix)
+app.include_router(gate_portal_router, prefix=settings.api_prefix)
+app.include_router(lesson_plans_router, prefix=settings.api_prefix)
+app.include_router(lesson_plans_portal_router, prefix=settings.api_prefix)
+app.include_router(question_bank_router, prefix=settings.api_prefix)
+app.include_router(question_bank_portal_router, prefix=settings.api_prefix)
+app.include_router(alumni_router, prefix=settings.api_prefix)
 app.include_router(hall_tickets_router, prefix=settings.api_prefix)
 app.include_router(hall_tickets_portal_router, prefix=settings.api_prefix)
 app.include_router(scholarships_router, prefix=settings.api_prefix)

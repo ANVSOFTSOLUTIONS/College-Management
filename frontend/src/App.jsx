@@ -33,6 +33,11 @@ import ElectivesPage from "./pages/ElectivesPage";
 import FeedbackPage from "./pages/FeedbackPage";
 import GrievancesPage from "./pages/GrievancesPage";
 import HallTicketsPage from "./pages/HallTicketsPage";
+import LessonPlansPage from "./pages/LessonPlansPage";
+import QuestionBankPage from "./pages/QuestionBankPage";
+import AlumniPage from "./pages/AlumniPage";
+import InventoryPage from "./pages/InventoryPage";
+import GatePage from "./pages/GatePage";
 import ScholarshipsPage from "./pages/ScholarshipsPage";
 import CertificateRequestsPage from "./pages/CertificateRequestsPage";
 import NaacPage from "./pages/NaacPage";
@@ -79,6 +84,8 @@ const NAV_ITEMS = [
   { id: "parent-alerts", label: "Parent Alerts", roles: ["admin", "teacher"] },
   { id: "exams", label: "Exams & Marks", roles: ["admin", "teacher"], module: "exams" },
   { id: "hall-tickets", label: "Hall tickets & seating", roles: ["admin"], module: "exams" },
+  { id: "lesson-plans", label: "Lesson plans & syllabus", roles: ["admin", "teacher"] },
+  { id: "question-bank", label: "Question bank", roles: ["admin", "teacher"] },
   { id: "homework", label: "Assignments", roles: ["admin", "teacher", "parent", "student"], module: "homework" },
   { id: "notices", label: "Notice board", roles: ["admin", "teacher", "parent", "student"], module: "notices" },
   { id: "timetable", label: "Timetable", roles: ["admin", "teacher", "parent", "student"], module: "timetable" },
@@ -89,6 +96,9 @@ const NAV_ITEMS = [
   { id: "hostel", label: "Hostel", roles: ["admin"], module: "hostel" },
   { id: "transport", label: "Transport", roles: ["admin"], module: "transport" },
   { id: "placements", label: "Placements", roles: ["admin"], module: "placements" },
+  { id: "alumni", label: "Alumni", roles: ["admin"] },
+  { id: "inventory", label: "Inventory", roles: ["admin"] },
+  { id: "gate", label: "Gate passes & visitors", roles: ["admin"] },
   { id: "my-placements", label: "Placements", roles: ["student"], module: "placements" },
   { id: "payroll", label: "Payroll", roles: ["admin"], module: "payroll" },
   { id: "my-payslips", label: "My payslips", roles: ["teacher"], module: "payroll" },
@@ -200,6 +210,11 @@ function AuthenticatedApp() {
     if (activeNav === "feedback") return <FeedbackPage />;
     if (activeNav === "grievances") return <GrievancesPage />;
     if (activeNav === "hall-tickets") return <HallTicketsPage />;
+    if (activeNav === "lesson-plans") return <LessonPlansPage />;
+    if (activeNav === "question-bank") return <QuestionBankPage />;
+    if (activeNav === "alumni") return <AlumniPage />;
+    if (activeNav === "inventory") return <InventoryPage />;
+    if (activeNav === "gate") return <GatePage />;
     if (activeNav === "scholarships") return <ScholarshipsPage />;
     if (activeNav === "certificate-requests") return <CertificateRequestsPage />;
     if (activeNav === "naac") return <NaacPage />;

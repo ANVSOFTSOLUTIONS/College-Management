@@ -48,6 +48,12 @@ first sign-in.
 - **Hall tickets & seating:** minimum attendance rule with condonation / hold-back overrides, exam rooms with seats alternating batches, printable hall tickets and seating charts, and hall tickets in the student app
 - **Scholarships:** government schemes per student and year (applied → verified → sanctioned → disbursed) with amounts and scheme-wise totals; status visible in the app
 - **Certificate requests:** students and parents request bonafide / TC in the app; the office approves (issues with the next serial) or rejects with a note
+- **Lesson plans & syllabus:** unit-wise topics per subject ticked off by faculty (web and app); progress and behind-schedule topics for admins and HODs; students see coverage per subject
+- **Question bank:** previous / model papers per subject (PDF or image); students open them from the app
+- **Alumni:** passed-out students added in one click, with current status (employed, higher studies …) and year-wise summary, also in the NAAC report
+- **SMS & WhatsApp (MSG91):** absence, remark, fee and result alerts to parents by SMS and/or WhatsApp; results alert goes out when an exam is published
+- **Inventory:** lab equipment, furniture, sports goods and consumables with issue / return / write-off history and low-stock flags
+- **Gate passes & visitors:** students request gate passes in the app; the office approves and marks out / back (late returns flagged) and parents are notified at each step; visitor register with check-in / check-out
 - **Faculty** designations (Professor, Assistant Professor …); student email, mobile and admission quota (Convener, Management …)
 - **Library:** catalogue with copies, issue / renew / return to students and faculty, loan limit, overdue list and per-day fines
 - **Hostel:** hostels (boys / girls), rooms with beds, allocate / move / vacate students; students and parents see the room, roommates and warden
@@ -254,6 +260,25 @@ build profiles: [mobile/README.md](mobile/README.md).
 A payment is recorded only after the backend asks the gateway itself and it
 confirms the right amount. Secret keys are stored encrypted and never sent
 back to the browser.
+
+## SMS and WhatsApp alerts (MSG91)
+
+Off until configured. Set these environment variables on the server (cPanel → Setup Python App → Environment variables). Never commit the auth key.
+
+| Variable | What |
+|---|---|
+| `SMS_ENABLED` | `true` to send SMS |
+| `SMS_MSG91_AUTH_KEY` | MSG91 auth key (used for WhatsApp too) |
+| `SMS_MSG91_TEMPLATE_ABSENCE`, `_REMARK`, `_FEE`, `_RESULT` | DLT-approved MSG91 flow template IDs. Variables: `##student##`, `##class##`, `##date##`, `##school##`, plus `##amount##`/`##due_date##` (fee), `##exam##`/`##result##` (result), `##category##`/`##subject##`/`##note##` (remark) |
+| `WHATSAPP_ENABLED` | `true` to also send WhatsApp |
+| `WHATSAPP_MSG91_NUMBER` | MSG91 integrated WhatsApp number, e.g. `919876543210` |
+| `WHATSAPP_TEMPLATE_ABSENCE`, `_REMARK`, `_FEE`, `_RESULT` | Approved WhatsApp template names. Body variables `{{1}}…{{4}}`: absence = student, class, date, college; remark = student, category, note, college; fee = student, amount, due date, college; result = student, exam, result, college |
+
+Weekly overdue-fee reminders: add a cPanel cron job, e.g. Monday 10:00:
+
+```
+cd /home/goldenle/college_backend && /home/goldenle/virtualenv/college_backend/3.11/bin/python -m scripts.send_fee_reminders
+```
 
 ## Tests and build
 

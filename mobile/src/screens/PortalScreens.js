@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Linking, Pressable, Text, View } from "react-native";
 
-import { api, errorText, WEB_URL } from "../api";
+import { api, API_URL, errorText, WEB_URL } from "../api";
 import { useApi, useAuth } from "../auth";
 import { Badge, Button, Card, Chips, colors, H, Input, Loader, Message, Muted, Row, rupees, Screen, Stat, today } from "../ui";
 
@@ -841,6 +841,153 @@ export function ScholarshipsCertificatesScreen({ childId, header }) {
           {r.note ? <Muted>Office: {r.note}</Muted> : null}
         </Card>
       ))}
+    </Screen>
+  );
+}
+
+/** Syllabus covered per subject, and previous question papers (opened in the browser with a short-lived link). */
+export function SyllabusPapersScreen({ childId, header }) {
+  const { token } = useAuth();
+  const syllabus = useApi(childId ? `/me/parent/children/${childId}/syllabus` : null);
+  const papers = useApi(childId ? `/me/parent/children/${childId}/question-papers` : null);
+  const [open, setOpen] = useState(null);
+  const [error, setError] = useState(null);
+
+  async function view(paper) {
+    setError(null);
+    try {
+      const link = await api(`/me/parent/children/${childId}/question-papers/${paper.id}/link`, { method: "POST", token });
+      await Linking.openURL(`${API_URL}${link.path}`);
+    } catch (err) {
+      setError(errorText(err));
+    }
+  }
+
+  return (
+    <Screen title="Syllabus & papers" refreshing={syllabus.loading} onRefresh={() => [syllabus, papers].forEach((q) => q.reload())}>
+      {header}
+      <H>Syllabus covered</H>
+      <Loader loading={syllabus.loading && !syllabus.data} error={syllabus.error} onRetry={syllabus.reload}>
+        {(syllabus.data ?? []).length === 0 && <Muted>Faculty haven't added lesson plans yet.</Muted>}
+        {(syllabus.data ?? []).map((s) => (
+          <Card key={s.subject_id} onPress={() => setOpen(open === s.subject_id ? null : s.subject_id)}>
+            <Row style={{ justifyContent: "space-between" }}>
+              <Text style={{ fontWeight: "700", color: colors.text, flex: 1 }}>{s.subject_name}</Text>
+              <Text style={{ fontWeight: "800", color: colors.brandDark }}>{s.percent ?? 0}%</Text>
+            </Row>
+            <View style={{ height: 6, backgroundColor: "#f1f5f9", borderRadius: 3, marginTop: 6 }}>
+              <View style={{ height: 6, borderRadius: 3, width: `${s.percent ?? 0}%`, backgroundColor: colors.brand }} />
+            </View>
+            <Muted>
+              {s.done} of {s.total} topics · tap for details
+            </Muted>
+            {open === s.subject_id &&
+              s.topics.map((t) => (
+                <Text key={t.id} style={{ color: t.completed_on ? colors.muted : colors.text, marginTop: 4 }}>
+                  {t.completed_on ? "✓" : "○"} Unit {t.unit}: {t.title}
+                </Text>
+              ))}
+          </Card>
+        ))}
+      </Loader>
+      <View style={{ height: 12 }} />
+      <H>Question papers</H>
+      <Message error={error} />
+      <Loader loading={papers.loading && !papers.data} error={papers.error} onRetry={papers.reload}>
+        {(papers.data ?? []).length === 0 && <Muted>No question papers uploaded yet.</Muted>}
+        {(papers.data ?? []).map((p) => (
+          <Card key={p.id} onPress={() => view(p)}>
+            <Text style={{ fontWeight: "700", color: colors.text }}>{p.title}</Text>
+            <Muted>
+              {p.subject_name}
+              {p.exam_year ? ` · ${p.exam_year}` : ""}
+              {p.regulation ? ` · ${p.regulation}` : ""} · tap to open
+            </Muted>
+          </Card>
+        ))}
+      </Loader>
+    </Screen>
+  );
+}
+
+const PASS_TONE = { pending: "amber", approved: "blue", out: "blue", returned: "green", rejected: "red", cancelled: "slate" };
+
+function nowPlus(hours) {
+  const d = new Date(Date.now() + hours * 3600 * 1000);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** Ask for a gate pass (leaving campus / hostel) and see its status. */
+export function GatePassScreen({ childId, header }) {
+  const { token } = useAuth();
+  const passes = useApi(childId ? `/me/parent/children/${childId}/gate-passes` : null);
+  const [form, setForm] = useState({ reason: "", leave_at: nowPlus(1), return_by: nowPlus(26) });
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState(null);
+  const [error, setError] = useState(null);
+
+  async function send() {
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const iso = (v) => v.trim().replace(" ", "T");
+      await api(`/me/parent/children/${childId}/gate-passes`, { method: "POST", token, body: { reason: form.reason, leave_at: iso(form.leave_at), return_by: iso(form.return_by) } });
+      setMessage("Request sent to the college office.");
+      setForm({ ...form, reason: "" });
+      passes.reload();
+    } catch (err) {
+      setError(errorText(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function cancel(id) {
+    try {
+      await api(`/me/parent/children/${childId}/gate-passes/${id}/cancel`, { method: "POST", token });
+      passes.reload();
+    } catch (err) {
+      setError(errorText(err));
+    }
+  }
+
+  return (
+    <Screen title="Gate pass" subtitle="Permission to leave campus or the hostel" refreshing={passes.loading} onRefresh={passes.reload}>
+      {header}
+      <Card>
+        <H>Request a gate pass</H>
+        <Input label="Reason" value={form.reason} onChangeText={(v) => setForm({ ...form, reason: v })} />
+        <Row>
+          <View style={{ flex: 1 }}>
+            <Input label="Leave (YYYY-MM-DD HH:MM)" value={form.leave_at} onChangeText={(v) => setForm({ ...form, leave_at: v })} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Input label="Return by" value={form.return_by} onChangeText={(v) => setForm({ ...form, return_by: v })} />
+          </View>
+        </Row>
+        <Message text={message} error={error} />
+        <Button title="Send request" onPress={send} loading={busy} disabled={form.reason.trim().length < 3} />
+      </Card>
+      <Loader loading={passes.loading && !passes.data} error={passes.error} onRetry={passes.reload}>
+        {(passes.data ?? []).map((p) => (
+          <Card key={p.id}>
+            <Row style={{ justifyContent: "space-between" }}>
+              <Text style={{ fontWeight: "700", color: colors.text, flex: 1 }}>{p.reason}</Text>
+              <Badge text={p.late ? "late" : p.status} tone={p.late ? "red" : PASS_TONE[p.status]} />
+            </Row>
+            <Muted>
+              {p.leave_at.replace("T", " ").slice(0, 16)} → {p.return_by.replace("T", " ").slice(0, 16)}
+            </Muted>
+            {p.note ? <Muted>Office: {p.note}</Muted> : null}
+            {p.status === "approved" && <Muted>Show this at the gate when leaving.</Muted>}
+            {(p.status === "pending" || p.status === "approved") && (
+              <Button title="Cancel" kind="danger" small onPress={() => cancel(p.id)} style={{ marginTop: 8, alignSelf: "flex-start" }} />
+            )}
+          </Card>
+        ))}
+      </Loader>
     </Screen>
   );
 }
